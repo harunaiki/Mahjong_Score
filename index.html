@@ -1,14 +1,14 @@
 <!DOCTYPE html>
 <!--
   雀点 - 麻雀点数記録Webアプリ
-  App Version: 1.3.0 (準拠する要件定義書・設計書 バージョン: 1.3 / 2026-07-18)
+  App Version: 1.4.1 (準拠する要件定義書・設計書 バージョン: 1.4 / 2026-07-19)
   単一HTMLファイル。ビルド不要。詳細はその他タブ > アプリ > バージョン情報を参照。
 -->
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<meta name="application-version" content="1.3.0">
+<meta name="application-version" content="1.4.1">
 <title>雀点 - 麻雀点数記録</title>
 <style>
 :root{
@@ -280,6 +280,23 @@ input.txt{border:1px solid var(--line);border-radius:10px;padding:10px 12px;font
 label.flabel{font-size:12.5px;color:var(--sub);display:block;margin:12px 14px 4px;}
 
 .svgchart{width:100%;height:220px;}
+
+/* ===== 6.3.5 清算確認画面 ===== */
+.settle-card{background:var(--card);border-radius:14px;margin:8px 12px;padding:13px 14px;}
+.settle-row{display:flex;justify-content:space-between;align-items:baseline;gap:10px;}
+.settle-name{font-size:15px;font-weight:700;}
+.settle-delta{font-size:19px;font-weight:800;font-variant-numeric:tabular-nums;}
+.settle-delta.pos{color:var(--plus);}
+.settle-delta.neg{color:var(--minus);}
+.settle-sub{font-size:12.5px;color:var(--sub);margin-top:3px;font-variant-numeric:tabular-nums;}
+.settle-info-card{background:#eceef2;border-radius:14px;margin:10px 12px;padding:12px 14px;}
+.settle-info-card .settle-info-title{font-size:12.5px;color:var(--sub);font-weight:700;margin-bottom:8px;}
+.settle-info-block{padding:6px 0;border-top:1px solid #dcdee3;}
+.settle-info-block:first-of-type{border-top:none;padding-top:0;}
+.settle-info-block .l1{font-size:14px;font-weight:700;}
+.settle-info-block .l2{font-size:12.5px;color:var(--sub);}
+.settle-info-block .l3{font-size:14px;font-weight:700;color:var(--accent);}
+.settle-info-line{font-size:13px;padding:4px 0;color:var(--text);}
 </style>
 </head>
 <body>
@@ -294,9 +311,13 @@ label.flabel{font-size:12.5px;color:var(--sub);display:block;margin:12px 14px 4p
 <script>
 'use strict';
 // ==== version ==== 要件定義書・設計書のバージョンに追従
-const APP_VERSION = '1.3.0';
-const SPEC_VERSION = '1.3';
-const BUILD_DATE = '2026-07-18';
+const APP_VERSION = '1.4.1';
+const SPEC_VERSION = '1.4';
+const BUILD_DATE = '2026-07-19';
+// ==== config ====(デプロイ時にここへ自分のGAS URLと合言葉を記入する。15.5)
+// 個人サーバーにこのファイルを1枚置く運用を想定: ここに値を入れておけば、
+// どの端末で開いても入力なしで同期が有効になる(localStorageの値があればそちらが優先)。
+const APP_CONFIG = { gasUrl: '', token: '' };
 // ==================================================================
 // ==== domain ==== (pure functions, no DOM) — 8章・9章準拠
 // Node-testable module. Will be inlined into index.html <script> later.
@@ -611,6 +632,9 @@ const engine = (function () {
         s.round = next.round;
         s.kyokuNum = next.kyokuNum;
         s.honba = next.honba;
+        // 次局に向けてリーチフラグをリセット(供託の本数=s.sticksは繰り越すが、
+        // 「今回のリーチ」フラグは新しい局の開始とともにクリアする。WINケースと同様の処理)
+        active.forEach((seat) => (s.riichi[seat] = false));
         if (!dealerTenpai) advanceDealerAndBench(s, game);
         break;
       }
@@ -1070,8 +1094,9 @@ const sync = (function () {
     return { ok: true, sent, remaining: q.length };
   }
 
-  function queueGameSave(game) {
-    storage.queuePush('games', [game]);
+  function queueGameSave(gameOrGames) {
+    const games = Array.isArray(gameOrGames) ? gameOrGames : [gameOrGames];
+    if (games.length) storage.queuePush('games', games);
   }
   function queuePlayersSave(players) {
     storage.queuePush('players', players);
@@ -1087,16 +1112,39 @@ const sync = (function () {
     const needIds = listRes.games
       .filter((rg) => !localById[rg.id] || (localById[rg.id].updatedAt || 0) < rg.updatedAt)
       .map((rg) => rg.id);
-    if (needIds.length === 0) return { ok: true, merged: 0 };
-    const got = await getGames(needIds);
-    if (!got.ok) return got;
-    got.games.forEach((rg) => {
-      const idx = local.findIndex((g) => g.id === rg.id);
-      if (idx >= 0) local[idx] = rg;
-      else local.push(rg);
-    });
-    storage.setGames(local.filter((g) => !g.deleted));
-    return { ok: true, merged: got.games.length };
+    let mergedGames = 0;
+    if (needIds.length > 0) {
+      const got = await getGames(needIds);
+      if (got.ok) {
+        got.games.forEach((rg) => {
+          const idx = local.findIndex((g) => g.id === rg.id);
+          if (idx >= 0) local[idx] = rg;
+          else local.push(rg);
+        });
+        storage.setGames(local.filter((g) => !g.deleted));
+        mergedGames = got.games.length;
+      }
+    }
+    // v1.4(15.2/15.4): list応答に含まれる全Playerをlast-write-winsでローカルにマージ。
+    // これにより対局のplayerIdに対応するプレイヤーがローカルに無い場合も補完される。
+    let mergedPlayers = 0;
+    if (Array.isArray(listRes.players)) {
+      const localPlayers = storage.getPlayers();
+      const localPById = Object.fromEntries(localPlayers.map((p) => [p.id, p]));
+      listRes.players.forEach((rp) => {
+        const lp = localPById[rp.id];
+        if (!lp) {
+          localPlayers.push(rp);
+          localPById[rp.id] = rp;
+          mergedPlayers++;
+        } else if ((lp.updatedAt || 0) < (rp.updatedAt || 0)) {
+          Object.assign(lp, rp);
+          mergedPlayers++;
+        }
+      });
+      if (mergedPlayers > 0) storage.setPlayers(localPlayers);
+    }
+    return { ok: true, merged: mergedGames, mergedPlayers };
   }
 
   return { cfg, isConfigured, ping, list, getGames, upsertGames, upsertPlayers, flushQueue, queueGameSave, queuePlayersSave, pullAndMerge };
@@ -1429,7 +1477,7 @@ const ui = (function () {
     const mode = S.setup.mode;
     const n = seatCountOf(mode);
     const rules = storage.getRules(mode === 'yonin_sanma' ? 'yonin_sanma' : mode);
-    const seats = S.setup.seatPlayerIds.map((pid, i) => ({ playerId: pid, wind: ['E', 'S', 'W', 'N'][i] }));
+    const seats = S.setup.seatPlayerIds.map((pid, i) => ({ playerId: pid, wind: ['E', 'S', 'W', 'N'][i], name: playerName(pid) }));
     const game = {
       id: engine.uid(),
       serialNo: storage.nextSerial(),
@@ -1484,7 +1532,7 @@ const ui = (function () {
     overlay.querySelector('[data-create-player]').onclick = () => {
       const name = overlay.querySelector('#newplayer-name').value.trim();
       if (!name) return;
-      const p = { id: engine.uid(), name, createdAt: Date.now() };
+      const p = { id: engine.uid(), name, createdAt: Date.now(), updatedAt: Date.now() };
       S.players.push(p);
       storage.setPlayers(S.players);
       sync.queuePlayersSave([p]);
@@ -1523,6 +1571,7 @@ const ui = (function () {
           const nm = prompt('プレイヤー名を編集', p.name);
           if (nm && nm.trim()) {
             p.name = nm.trim();
+            p.updatedAt = Date.now();
             storage.setPlayers(S.players);
             sync.queuePlayersSave([p]);
             refresh();
@@ -1575,7 +1624,7 @@ const ui = (function () {
         serialNo: storage.nextSerial(),
         mode,
         rules,
-        seats: S.setup.seatPlayerIds.map((pid, i) => ({ playerId: pid, wind: ['E', 'S', 'W', 'N'][i] })),
+        seats: S.setup.seatPlayerIds.map((pid, i) => ({ playerId: pid, wind: ['E', 'S', 'W', 'N'][i], name: playerName(pid) })),
         emptySeatSide: mode === 'sanma' ? S.setup.emptySeatSide || 'top' : undefined,
         startedAt: Date.now(),
         endedAt: Date.now(),
@@ -1589,6 +1638,14 @@ const ui = (function () {
       S.pendingResult = game;
       navigate('#/result');
     };
+  }
+
+  // 送信・保存前に seats[].name を必ず埋める(GAS/エクスポート先で人間可読にするため。
+  // 名簿から名前が変更されていた場合も、この対局が作成された時点の名前で上書きし直す)
+  function backfillSeatNames(game) {
+    game.seats.forEach((s) => {
+      s.name = playerName(s.playerId);
+    });
   }
 
   function buildResult(game, finalPoints) {
@@ -1777,13 +1834,21 @@ const ui = (function () {
     storage.setActiveGame(S.game);
   }
 
-  function appendEvent(ev) {
+  function stampEvent(ev) {
     const st = engine.deriveState(S.game);
     ev.at = Date.now();
     ev.kyoku = engine.kyokuLabel(st);
     ev.honba = st.honba;
+    return ev;
+  }
+
+  function commitStampedEvent(ev) {
     S.game.events.push(ev);
     saveActiveGame();
+  }
+
+  function appendEvent(ev) {
+    commitStampedEvent(stampEvent(ev));
   }
 
   function toggleRiichi(seat) {
@@ -1844,6 +1909,133 @@ const ui = (function () {
     render();
   }
 
+  // =================================================================
+  // 6.3.5 清算確認画面: 和了・複数和了・流局・チョンボは、確定前に必ずこの画面を通す
+  // =================================================================
+  function openSettlementConfirm(ev, opts) {
+    // opts: { onBack: fn, onConfirm: fn }
+    const preState = engine.deriveState(S.game);
+    const postGame = Object.assign({}, S.game, { events: S.game.events.concat([ev]) });
+    const postState = engine.deriveState(postGame);
+    const active = engine.activeSeats(preState, S.game);
+
+    const cardsHtml = active
+      .map((seat) => {
+        const before = preState.points[seat];
+        const after = postState.points[seat];
+        const delta = after - before;
+        const deltaStr = (delta > 0 ? '+' : '') + fmtPts(delta) + ' 点';
+        return (
+          '<div class="settle-card"><div class="settle-row">' +
+          '<span class="settle-name">' + playerName(S.game.seats[seat].playerId) + '</span>' +
+          '<span class="settle-delta ' + (delta >= 0 ? 'pos' : 'neg') + '">' + deltaStr + '</span>' +
+          '</div><div class="settle-sub">' + fmtPts(before) + ' → ' + fmtPts(after) + '</div></div>'
+        );
+      })
+      .join('');
+
+    const infoHtml = buildSettlementInfoCard(ev, preState, postState, S.game);
+
+    const overlay = openSheet(
+      '<div class="sheet-header"><button data-back class="iconbtn">‹</button><h2>清算確認</h2><span class="side"></span></div>' +
+      '<div class="sheet-body">' +
+      '<div class="section-title">点数変動</div>' +
+      cardsHtml +
+      infoHtml +
+      '<div style="padding:18px 14px 4px;"><button class="btn btn-primary btn-block" data-confirm>確定</button></div>' +
+      '</div>',
+      { full: true }
+    );
+    overlay.querySelector('[data-back]').onclick = () => {
+      closeOverlay(overlay);
+      if (opts.onBack) opts.onBack();
+    };
+    overlay.querySelector('[data-confirm]').onclick = () => {
+      closeOverlay(overlay);
+      opts.onConfirm();
+    };
+  }
+
+  function buildSettlementInfoCard(ev, preState, postState, game) {
+    const nm = (s) => playerName(game.seats[s].playerId);
+    const blocks = [];
+    let title = '';
+
+    if (ev.type === 'WIN') {
+      title = '和了情報';
+      ev.winners.forEach((w) => {
+        const isDealer = preState.dealerIdx === w.seat;
+        const methodLine = ev.method === 'ron' ? 'ロン (' + nm(ev.loserSeat) + ')' : 'ツモ';
+        const scoreLine = w.directPoints != null ? w.directPoints + '点' : w.han + '翻' + w.fu + '符';
+        let payLine = w.directPoints + '点';
+        if (w.directPoints == null) {
+          const pay = domain.winPayments(w.han, w.fu, isDealer ? 'dealer' : 'child', ev.method);
+          if (ev.method === 'ron') payLine = fmtPts(pay.total) + '点';
+          else if (pay.allSame) payLine = fmtPts(pay.detail.childEach) + '∀';
+          else payLine = fmtPts(pay.detail.childPays) + '-' + fmtPts(pay.detail.dealerPays);
+        }
+        blocks.push(
+          '<div class="settle-info-block"><div class="l1">' + nm(w.seat) + '</div>' +
+          '<div class="l2">' + methodLine + '</div>' +
+          '<div class="l1">' + scoreLine + '</div>' +
+          '<div class="l3">' + payLine + '</div></div>'
+        );
+      });
+      const gameLines = [];
+      if (preState.sticks > 0) {
+        gameLines.push('供託: ' + preState.sticks + '本 → ' + nm(ev.winners[0].seat) + 'が供託' + preState.sticks + '本を獲得');
+      }
+      if (preState.honba > 0) {
+        gameLines.push(preState.honba + '本場 → +' + game.rules.honbaValue * preState.honba + '点(' + (ev.method === 'ron' ? '放銃者負担' : '支払者で割り勘') + ')');
+      }
+      const winnerIsDealer = ev.winners.some((w) => w.seat === preState.dealerIdx);
+      if (winnerIsDealer && !game.rules.dealerWinRotates) {
+        gameLines.push('連荘 → ' + engine.kyokuLabel(postState) + ' ' + postState.honba + '本場へ');
+      } else {
+        gameLines.push('親流れ → ' + engine.kyokuLabel(postState) + 'へ');
+      }
+      if (gameLines.length) {
+        blocks.push('<div class="settle-info-block">' + gameLines.map((l) => '<div class="settle-info-line">' + l + '</div>').join('') + '</div>');
+      }
+    } else if (ev.type === 'DRAW') {
+      title = '流局情報';
+      if (ev.special) {
+        blocks.push('<div class="settle-info-block"><div class="settle-info-line">特殊流局(九種九牌・四風連打など) → 罰符なし・本場+1</div></div>');
+      } else {
+        const tenpaiNames = ev.tenpaiSeats.map(nm).join('・') || 'なし';
+        const notenNames = engine
+          .activeSeats(preState, game)
+          .filter((s) => !ev.tenpaiSeats.includes(s))
+          .map(nm)
+          .join('・') || 'なし';
+        blocks.push(
+          '<div class="settle-info-block">' +
+          '<div class="settle-info-line">テンパイ: ' + tenpaiNames + '</div>' +
+          '<div class="settle-info-line">ノーテン: ' + notenNames + '</div>' +
+          '</div>'
+        );
+      }
+      const gameLines = [];
+      if (postState.sticks > 0) gameLines.push('供託 ' + postState.sticks + '本 → 次局へ繰越');
+      const dealerTenpai = ev.special || ev.tenpaiSeats.includes(preState.dealerIdx);
+      if (dealerTenpai) gameLines.push('連荘 → ' + engine.kyokuLabel(postState) + ' ' + postState.honba + '本場へ');
+      else gameLines.push('親流れ → ' + engine.kyokuLabel(postState) + ' ' + postState.honba + '本場へ');
+      blocks.push('<div class="settle-info-block">' + gameLines.map((l) => '<div class="settle-info-line">' + l + '</div>').join('') + '</div>');
+    } else if (ev.type === 'CHOMBO') {
+      title = 'チョンボ情報';
+      const penaltyLabel = ev.penalty === 'mangan' ? '満貫払い' : ev.penalty === 'fixed' ? '固定点数(' + ev.value + '点)' : '精算時pt減算';
+      blocks.push(
+        '<div class="settle-info-block">' +
+        '<div class="settle-info-line">違反者: ' + nm(ev.seat) + '</div>' +
+        '<div class="settle-info-line">罰則方式: ' + penaltyLabel + '</div>' +
+        '<div class="settle-info-line">' + engine.kyokuLabel(preState) + ' ' + preState.honba + '本場 を同一条件でやり直します</div>' +
+        '</div>'
+      );
+    }
+
+    if (!blocks.length) return '';
+    return '<div class="settle-info-card"><div class="settle-info-title">' + title + '</div>' + blocks.join('') + '</div>';
+  }
 
   function stopGameTimer() {
     if (S.timerHandle) {
@@ -1951,21 +2143,26 @@ const ui = (function () {
     overlay.querySelector('[data-close2]').onclick = () => closeOverlay(overlay);
     overlay.querySelector('[data-m="tsumo"]').onclick = () => {
       closeOverlay(overlay);
-      if (S.game.seats.length === 3 || S.game.mode === 'yonin_sanma') {
-        // sanma系: 3人しかいないため放銃者選択不要
-      }
-      openWinScoreSheet(seat, 'tsumo', null, (winner) => {
-        commitWin([winner], 'tsumo', null);
-      });
+      startTsumoScoring(seat);
     };
     overlay.querySelector('[data-m="ron"]').onclick = () => {
       closeOverlay(overlay);
       openLoserPicker(seat, (loserSeat) => {
-        openWinScoreSheet(seat, 'ron', loserSeat, (winner) => {
-          commitWin([winner], 'ron', loserSeat);
-        });
+        startRonScoring(seat, loserSeat);
       });
     };
+  }
+
+  function startTsumoScoring(seat) {
+    openWinScoreSheet(seat, 'tsumo', null, (winner) => {
+      commitWin([winner], 'tsumo', null, () => startTsumoScoring(seat));
+    });
+  }
+
+  function startRonScoring(seat, loserSeat) {
+    openWinScoreSheet(seat, 'ron', loserSeat, (winner) => {
+      commitWin([winner], 'ron', loserSeat, () => startRonScoring(seat, loserSeat));
+    });
   }
 
   function openLoserPicker(winnerSeat, onPick) {
@@ -2081,17 +2278,22 @@ const ui = (function () {
     };
   }
 
-  function commitWin(winners, method, loserSeat) {
-    appendEvent({ type: 'WIN', winners, method, loserSeat: loserSeat != null ? loserSeat : undefined });
-    const st = engine.deriveState(S.game);
-    const w = winners[0];
-    const amt = w.directPoints != null ? w.directPoints : domain.winPayments(w.han, w.fu, S.game.seats.length && st.dealerIdx === w.seat ? 'dealer' : 'child', method).total;
-    toast(playerName(S.game.seats[w.seat].playerId) + ' ' + (method === 'tsumo' ? 'ツモ' : 'ロン') + ' +' + fmtPts(amt) + (winners.length > 1 ? ' 他' + (winners.length - 1) + '名' : ''));
-    if (st.finished) {
-      offerGameEndByLastKyoku();
-    } else {
-      render();
-    }
+  function commitWin(winners, method, loserSeat, reopenFn) {
+    const ev = { type: 'WIN', winners, method, loserSeat: loserSeat != null ? loserSeat : undefined };
+    stampEvent(ev);
+    openSettlementConfirm(ev, {
+      onBack: reopenFn,
+      onConfirm: () => {
+        commitStampedEvent(ev);
+        const st = engine.deriveState(S.game);
+        toast('和了を確定しました');
+        if (st.finished) {
+          offerGameEndByLastKyoku();
+        } else {
+          render();
+        }
+      },
+    });
   }
 
   // ---- 中央ボタンメニュー ----
@@ -2124,11 +2326,19 @@ const ui = (function () {
   function openDrawModal() {
     const st = engine.deriveState(S.game);
     const active = engine.activeSeats(st, S.game);
-    const tenpai = new Set();
+    // v1.4(6.4): リーチ宣言者は自動的にテンパイ扱い・変更不可
+    const tenpai = new Set(active.filter((s) => st.riichi[s]));
     function rowsHtml() {
       return active
         .map((s) => {
           const on = tenpai.has(s);
+          const locked = st.riichi[s];
+          if (locked) {
+            return (
+              '<div class="list-row"><div class="label">' + playerName(S.game.seats[s].playerId) + '</div>' +
+              '<div class="value" style="color:var(--gold);font-weight:700;">🀄 テンパイ(リーチ)</div></div>'
+            );
+          }
           return (
             '<div class="list-row"><div class="label">' + playerName(S.game.seats[s].playerId) + '</div>' +
             '<div class="seg" style="margin:0;width:160px;"><button class="' + (!on ? 'active' : '') + '" data-s="' + s + '" data-v="0">ノーテン</button><button class="' + (on ? 'active' : '') + '" data-s="' + s + '" data-v="1">テンパイ</button></div></div>'
@@ -2142,7 +2352,7 @@ const ui = (function () {
       '<div style="padding:14px;display:flex;gap:8px;">' +
       '<button class="btn btn-ghost" style="flex:1;" data-special>特殊流局(九種九牌等)</button>' +
       '</div>' +
-      '<div style="padding:0 14px;"><button class="btn btn-primary btn-block" data-confirm>確定</button></div></div>',
+      '<div style="padding:0 14px;"><button class="btn btn-primary btn-block" data-confirm>次へ</button></div></div>',
       { full: true }
     );
     overlay.querySelector('[data-close]').onclick = () => closeOverlay(overlay);
@@ -2159,16 +2369,28 @@ const ui = (function () {
     }
     wire();
     overlay.querySelector('[data-special]').onclick = () => {
-      appendEvent({ type: 'DRAW', tenpaiSeats: [], special: true });
       closeOverlay(overlay);
-      toast('特殊流局(本場+1)');
-      finishOrRender();
+      const ev = stampEvent({ type: 'DRAW', tenpaiSeats: [], special: true });
+      openSettlementConfirm(ev, {
+        onBack: () => openDrawModal(),
+        onConfirm: () => {
+          commitStampedEvent(ev);
+          toast('特殊流局(本場+1)');
+          finishOrRender();
+        },
+      });
     };
     overlay.querySelector('[data-confirm]').onclick = () => {
-      appendEvent({ type: 'DRAW', tenpaiSeats: Array.from(tenpai) });
       closeOverlay(overlay);
-      toast('流局');
-      finishOrRender();
+      const ev = stampEvent({ type: 'DRAW', tenpaiSeats: Array.from(tenpai) });
+      openSettlementConfirm(ev, {
+        onBack: () => openDrawModal(),
+        onConfirm: () => {
+          commitStampedEvent(ev);
+          toast('流局を確定しました');
+          finishOrRender();
+        },
+      });
     };
   }
 
@@ -2247,14 +2469,15 @@ const ui = (function () {
     };
   }
 
-  function collectDabururonScores(loserSeat, remaining, collected) {
+  function collectDabururonScores(loserSeat, remaining, collected, fullOrdered) {
+    fullOrdered = fullOrdered || remaining;
     if (remaining.length === 0) {
-      commitWin(collected, 'ron', loserSeat);
+      commitWin(collected, 'ron', loserSeat, () => collectDabururonScores(loserSeat, fullOrdered, [], fullOrdered));
       return;
     }
     const seat = remaining[0];
     openWinScoreSheet(seat, 'ron', loserSeat, (winner) => {
-      collectDabururonScores(loserSeat, remaining.slice(1), collected.concat([winner]));
+      collectDabururonScores(loserSeat, remaining.slice(1), collected.concat([winner]), fullOrdered);
     });
   }
 
@@ -2279,22 +2502,15 @@ const ui = (function () {
   }
 
   function confirmChombo(seat) {
-    const st = engine.deriveState(S.game);
-    const isDealer = st.dealerIdx === seat;
-    const preview = isDealer ? '親のため、他家へ各4,000点を支払います' : '子のため、親へ4,000点・他の子へ各2,000点を支払います';
-    const overlay = openSheet(
-      '<div style="font-weight:800;font-size:16px;margin-bottom:4px;">チョンボ確認</div>' +
-      '<p>' + playerName(S.game.seats[seat].playerId) + ' の反則です。' + preview + '<br>同一局(本場・親据置き)をやり直します。</p>' +
-      '<div class="row"><button class="btn btn-ghost" data-close>キャンセル</button><button class="btn" style="background:var(--red);color:#fff;" data-ok>確定</button></div>',
-      { center: true }
-    );
-    overlay.querySelector('[data-close]').onclick = () => closeOverlay(overlay);
-    overlay.querySelector('[data-ok]').onclick = () => {
-      appendEvent({ type: 'CHOMBO', seat, penalty: 'mangan' });
-      closeOverlay(overlay);
-      toast('チョンボ処理を記録しました');
-      render();
-    };
+    const ev = stampEvent({ type: 'CHOMBO', seat, penalty: 'mangan' });
+    openSettlementConfirm(ev, {
+      onBack: () => openChomboModal(),
+      onConfirm: () => {
+        commitStampedEvent(ev);
+        toast('チョンボ処理を記録しました');
+        render();
+      },
+    });
   }
 
   // ---- 対局中メニュー ----
@@ -2590,12 +2806,10 @@ const ui = (function () {
     if (back) back.onclick = () => navigate('#/records');
     if (isPending) {
       $app.querySelector('[data-act="save"]').onclick = () => {
+        backfillSeatNames(game);
         storage.saveGame(game);
         sync.queueGameSave(game);
         sync.flushQueue();
-        game.seats.forEach((s) => {
-          const p = S.players.find((x) => x.id === s.playerId);
-        });
         S.pendingResult = null;
         toast('対局を保存しました');
         navigate('#/records');
@@ -2613,6 +2827,7 @@ const ui = (function () {
         const memo = prompt('メモを編集', game.memo || '');
         if (memo != null) {
           game.memo = memo;
+          backfillSeatNames(game);
           storage.saveGame(game);
           sync.queueGameSave(game);
           render();
@@ -2627,7 +2842,12 @@ const ui = (function () {
   // RECORDS SCREEN (#/records)
   // =================================================================
   function screenRecords() {
-    sync.pullAndMerge();
+    sync.pullAndMerge().then((res) => {
+      if (res && res.ok && (res.merged || res.mergedPlayers)) {
+        S.players = storage.getPlayers();
+        if (currentRoute().startsWith('#/records')) render();
+      }
+    });
     const view = S.recordsView;
     return (
       topbar('戦績') +
@@ -2925,11 +3145,12 @@ const ui = (function () {
       '</div>' +
       '<div class="section-title">スプレッドシート連携</div><div class="card">' +
       '<div class="list-row"><div class="label">GAS URL</div></div>' +
-      '<div style="padding:0 14px 10px;"><input class="txt" id="gas-url" placeholder="https://script.google.com/macros/s/.../exec" value="' + (cfg.url || '') + '"></div>' +
+      '<div style="padding:0 14px 10px;"><input class="txt" id="gas-url" placeholder="' + (APP_CONFIG.gasUrl || 'https://script.google.com/macros/s/.../exec') + '" value="' + (cfg.url || '') + '"></div>' +
       '<div class="list-row"><div class="label">合言葉</div></div>' +
-      '<div style="padding:0 14px 10px;"><input class="txt" id="gas-token" placeholder="TOKEN" value="' + (cfg.token || '') + '"></div>' +
+      '<div style="padding:0 14px 10px;"><input class="txt" id="gas-token" placeholder="' + (APP_CONFIG.token || 'TOKEN') + '" value="' + (cfg.token || '') + '"></div>' +
       '<div class="list-row tap" data-act="save-sync"><div class="label">設定を保存 / 接続テスト</div><span class="chev">›</span></div>' +
       '<div class="list-row tap" data-act="sync-now"><div class="label">今すぐ全送信 / 取得</div><span class="chev">›</span></div>' +
+      '<div class="list-row tap" data-act="setup-link"><div class="label">他端末用の設定リンクを表示</div><span class="chev">›</span></div>' +
       '<div class="list-row"><div class="label">未送信キュー</div><div class="value">' + q.length + '件</div></div>' +
       '<div class="list-row"><div class="label">最終同期</div><div class="value">' + (cfg.lastSyncAt ? fmtDateTime(cfg.lastSyncAt) : '未同期') + '</div></div>' +
       '</div>' +
@@ -2962,10 +3183,30 @@ const ui = (function () {
     };
     q('[data-act="sync-now"]').onclick = async () => {
       toast('同期中...');
-      const r1 = await sync.flushQueue();
-      const r2 = await sync.pullAndMerge();
+      await sync.flushQueue();
+      const res = await sync.pullAndMerge();
+      if (res && res.ok) S.players = storage.getPlayers();
       toast('同期が完了しました');
       render();
+    };
+    q('[data-act="setup-link"]').onclick = () => {
+      const cfg = storage.getSyncConfig();
+      if (!cfg.url) {
+        toast('先にGAS URLを保存してください');
+        return;
+      }
+      const link = buildSetupLink();
+      const overlay = openSheet(
+        '<div style="font-weight:800;font-size:16px;margin-bottom:10px;">他端末用の設定リンク</div>' +
+        '<p style="font-size:13px;color:var(--sub);text-align:left;">このリンクを他の端末で開くと、同期設定(URL・合言葉)が入力なしで反映されます。</p>' +
+        '<textarea class="memo" readonly style="font-size:11px;" onclick="this.select()">' + link + '</textarea>' +
+        '<div class="row" style="margin-top:14px;"><button class="btn btn-ghost" data-close>閉じる</button><button class="btn btn-primary" data-copy>コピー</button></div>',
+        { center: true }
+      );
+      overlay.querySelector('[data-close]').onclick = () => closeOverlay(overlay);
+      overlay.querySelector('[data-copy]').onclick = () => {
+        navigator.clipboard && navigator.clipboard.writeText(link).then(() => toast('コピーしました')).catch(() => toast('コピーできませんでした。手動で選択してください'));
+      };
     };
     q('[data-act="reset-all"]').onclick = () => {
       confirmDialog('全データ削除', 'プレイヤー・対局データ・設定をすべて削除します。元に戻せません。', '削除する', () => {
@@ -3059,13 +3300,15 @@ const ui = (function () {
     const opts = ids.map((id) => [id, playerName(id)]);
     selectDialog('統合先を選択', opts, ids[0], (targetId) => {
       const sourceIds = ids.filter((id) => id !== targetId);
+      const targetName = playerName(targetId);
       const games = storage.getGames();
-      let affected = 0;
+      const touchedGames = [];
       games.forEach((g) => {
         let touched = false;
         g.seats.forEach((s) => {
           if (sourceIds.includes(s.playerId)) {
             s.playerId = targetId;
+            s.name = targetName;
             touched = true;
           }
         });
@@ -3078,25 +3321,82 @@ const ui = (function () {
           });
         }
         if (touched) {
-          affected++;
           g.updatedAt = Date.now();
+          touchedGames.push(g);
         }
       });
       storage.setGames(games);
+      const archivedPlayers = [];
       S.players.forEach((p) => {
-        if (sourceIds.includes(p.id)) p.archived = true;
+        if (sourceIds.includes(p.id)) {
+          p.archived = true;
+          p.updatedAt = Date.now();
+          archivedPlayers.push(p);
+        }
       });
       storage.setPlayers(S.players);
-      toast(affected + '件の対局を統合しました');
+      if (touchedGames.length) {
+        sync.queueGameSave(touchedGames);
+      }
+      if (archivedPlayers.length) {
+        sync.queuePlayersSave(archivedPlayers);
+      }
+      sync.flushQueue();
+      toast(touchedGames.length + '件の対局を統合しました');
       render();
     });
+  }
+
+  // ---- v1.4(15.5): 設定共有リンク #setup=<Base64 JSON> の読み取り ----
+  function consumeSetupLink() {
+    const h = location.hash;
+    if (!h.startsWith('#setup=')) return;
+    try {
+      const b64 = h.slice('#setup='.length);
+      const json = decodeURIComponent(escape(atob(b64)));
+      const parsed = JSON.parse(json);
+      if (parsed.gasUrl) {
+        const cfg = storage.getSyncConfig();
+        storage.setSyncConfig({ url: parsed.gasUrl, token: parsed.token || '', lastSyncAt: cfg.lastSyncAt || null });
+        toast('スプレッドシート連携の設定を取り込みました');
+      }
+    } catch (e) {
+      console.error('setup link parse failed', e);
+    }
+    history.replaceState(null, '', location.pathname + location.search);
+  }
+
+  // ---- v1.4(15.5): localStorageに同期設定が無ければ APP_CONFIG を自動採用 ----
+  function applyDefaultSyncConfig() {
+    const cfg = storage.getSyncConfig();
+    if (!cfg.url && typeof APP_CONFIG !== 'undefined' && APP_CONFIG.gasUrl) {
+      storage.setSyncConfig({ url: APP_CONFIG.gasUrl, token: APP_CONFIG.token || '', lastSyncAt: cfg.lastSyncAt || null });
+    }
+  }
+
+  function buildSetupLink() {
+    const cfg = storage.getSyncConfig();
+    const json = JSON.stringify({ gasUrl: cfg.url, token: cfg.token });
+    const b64 = btoa(unescape(encodeURIComponent(json)));
+    return location.origin + location.pathname + '#setup=' + b64;
   }
 
   // =================================================================
   // INIT
   // =================================================================
   function init() {
+    consumeSetupLink();
+    applyDefaultSyncConfig();
     render();
+    if (sync.isConfigured()) {
+      sync.pullAndMerge().then((res) => {
+        if (res && res.ok && (res.merged || res.mergedPlayers)) {
+          S.players = storage.getPlayers();
+          if (currentRoute() === '#/' || currentRoute().startsWith('#/records')) render();
+        }
+      });
+      sync.flushQueue();
+    }
     window.addEventListener('online', () => sync.flushQueue());
   }
 
