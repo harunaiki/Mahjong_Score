@@ -1,14 +1,14 @@
 <!DOCTYPE html>
 <!--
   雀点 - 麻雀点数記録Webアプリ
-  App Version: 1.4.3 (準拠する要件定義書・設計書 バージョン: 1.4 / 2026-07-19)
+  App Version: 1.4.4 (準拠する要件定義書・設計書 バージョン: 1.4 / 2026-07-19)
   単一HTMLファイル。ビルド不要。詳細はその他タブ > アプリ > バージョン情報を参照。
 -->
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<meta name="application-version" content="1.4.3">
+<meta name="application-version" content="1.4.4">
 <title>雀点 - 麻雀点数記録</title>
 <style>
 :root{
@@ -311,7 +311,7 @@ label.flabel{font-size:12.5px;color:var(--sub);display:block;margin:12px 14px 4p
 <script>
 'use strict';
 // ==== version ==== 要件定義書・設計書のバージョンに追従
-const APP_VERSION = '1.4.3';
+const APP_VERSION = '1.4.4';
 const SPEC_VERSION = '1.4';
 const BUILD_DATE = '2026-07-19';
 // ==== config ====(デプロイ時にここへ自分のGAS URLと合言葉を記入する。15.5)
@@ -1586,21 +1586,78 @@ const ui = (function () {
       overlay.querySelectorAll('[data-delp]').forEach((b) =>
         b.addEventListener('click', () => {
           const p = S.players.find((x) => x.id === b.dataset.delp);
-          confirmDialog('プレイヤーを削除', p.name + ' を名簿から削除しますか?過去の対局記録には引き続き名前が残ります。', '削除する', () => {
-            // GameRecordのdeletedと同じ「論理削除」方式(10章)。配列からは消さず、
-            // deleted:trueで他端末にも同期する(スプレッドシート連携時のみ有効)。
-            p.deleted = true;
-            p.updatedAt = Date.now();
-            storage.setPlayers(S.players);
-            sync.queuePlayersSave([p]);
-            sync.flushQueue();
-            refresh();
-          }, true);
+          openDeletePlayerFlow(p, refresh);
         })
       );
     }
     overlay.querySelector('[data-add]').onclick = () => promptNewPlayer(() => refresh());
     wire();
+  }
+
+  // ---- プレイヤー削除フロー: 「除外のみ」か「名前も匿名化」かを選ばせる ----
+  function openDeletePlayerFlow(p, refresh) {
+    const overlay = openSheet(
+      '<div class="sheet-header"><span></span><h2>' + p.name + ' を削除</h2><button data-close class="iconbtn">×</button></div>' +
+      '<div class="action-list">' +
+      '<button data-mode="soft">今後の対局から除外する<br><span style="font-weight:400;font-size:12px;color:var(--sub);">過去の対局には引き続き名前が残ります(推奨)</span></button>' +
+      '<button data-mode="anon" style="color:var(--red);">名前も匿名化して消す<br><span style="font-weight:400;font-size:12px;color:var(--sub);">過去の全対局の表示名も置き換えます。元に戻せません</span></button>' +
+      '<button class="cancel" data-close2>キャンセル</button>' +
+      '</div>'
+    );
+    overlay.querySelector('[data-close]').onclick = () => closeOverlay(overlay);
+    overlay.querySelector('[data-close2]').onclick = () => closeOverlay(overlay);
+    overlay.querySelector('[data-mode="soft"]').onclick = () => {
+      closeOverlay(overlay);
+      confirmDialog('削除しますか?', p.name + ' を今後の対局から選べないようにします。過去の対局記録の名前はそのまま残ります。', '削除する', () => {
+        // GameRecordのdeletedと同じ「論理削除」方式(10章)。配列からは消さず、
+        // deleted:trueで他端末にも同期する(スプレッドシート連携時のみ有効)。
+        p.deleted = true;
+        p.updatedAt = Date.now();
+        storage.setPlayers(S.players);
+        sync.queuePlayersSave([p]);
+        sync.flushQueue();
+        refresh();
+      }, true);
+    };
+    overlay.querySelector('[data-mode="anon"]').onclick = () => {
+      closeOverlay(overlay);
+      const affected = storage.getGames().filter((g) => g.seats.some((s) => s.playerId === p.id));
+      confirmDialog(
+        '名前を匿名化しますか?',
+        p.name + ' が参加した過去の対局' + affected.length + '件すべてで、表示名を「削除済みプレイヤー」に置き換えます。この操作は元に戻せません。',
+        '匿名化する',
+        () => anonymizePlayer(p, affected, refresh),
+        true
+      );
+    };
+  }
+
+  function anonymizePlayer(p, affectedGames, refresh) {
+    const anonName = '削除済みプレイヤー';
+    // 1) プレイヤー本体を改名(以後、playerNameOf_)を通す表示は全てこの名前になる
+    p.name = anonName;
+    p.deleted = true;
+    p.updatedAt = Date.now();
+    storage.setPlayers(S.players);
+    // 2) 過去の対局に埋め込まれたseat.nameスナップショット(GAS/エクスポート用)も
+    //    書き換えて再保存・再送信する。これにより_rawのJSONやスプレッドシートの
+    //    表示名からも元の名前が消える(通常のリネーム+対局再保存と同じ安全な経路)。
+    affectedGames.forEach((g) => {
+      g.seats.forEach((s) => {
+        if (s.playerId === p.id) s.name = anonName;
+      });
+      g.updatedAt = Date.now();
+    });
+    storage.setGames(storage.getGames().map((g) => {
+      const match = affectedGames.find((a) => a.id === g.id);
+      return match || g;
+    }));
+    sync.queuePlayersSave([p]);
+    if (affectedGames.length) sync.queueGameSave(affectedGames);
+    sync.flushQueue();
+    S.players = storage.getPlayers();
+    toast(affectedGames.length + '件の対局の表示名を匿名化しました');
+    refresh();
   }
 
   // ---- 結果のみ記録 (F-14) ----
