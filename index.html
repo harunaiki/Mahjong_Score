@@ -1,14 +1,14 @@
 <!DOCTYPE html>
 <!--
   雀点 - 麻雀点数記録Webアプリ
-  App Version: 1.4.2 (準拠する要件定義書・設計書 バージョン: 1.4 / 2026-07-19)
+  App Version: 1.4.3 (準拠する要件定義書・設計書 バージョン: 1.4 / 2026-07-19)
   単一HTMLファイル。ビルド不要。詳細はその他タブ > アプリ > バージョン情報を参照。
 -->
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<meta name="application-version" content="1.4.2">
+<meta name="application-version" content="1.4.3">
 <title>雀点 - 麻雀点数記録</title>
 <style>
 :root{
@@ -311,7 +311,7 @@ label.flabel{font-size:12.5px;color:var(--sub);display:block;margin:12px 14px 4p
 <script>
 'use strict';
 // ==== version ==== 要件定義書・設計書のバージョンに追従
-const APP_VERSION = '1.4.2';
+const APP_VERSION = '1.4.3';
 const SPEC_VERSION = '1.4';
 const BUILD_DATE = '2026-07-19';
 // ==== config ====(デプロイ時にここへ自分のGAS URLと合言葉を記入する。15.5)
@@ -1536,6 +1536,7 @@ const ui = (function () {
       S.players.push(p);
       storage.setPlayers(S.players);
       sync.queuePlayersSave([p]);
+      sync.flushQueue();
       closeOverlay(overlay);
       if (onCreate) onCreate(p);
     };
@@ -2842,6 +2843,7 @@ const ui = (function () {
           backfillSeatNames(game);
           storage.saveGame(game);
           sync.queueGameSave(game);
+          sync.flushQueue();
           render();
         }
       };
