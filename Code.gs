@@ -1,6 +1,24 @@
 /**
  * 麻雀点数記録アプリ - Google Apps Script バックエンド (15章準拠)
- * Backend Version: 1.3 (対応アプリ: v1.4.2以降 / 準拠する要件定義書・設計書バージョン: 1.4)
+ * Backend Version: 2.1 (対応アプリ: v2.1.0以降 / 準拠する要件定義書・設計書バージョン: 2.1)
+ *
+ * v2.1 変更点(F-35 会機能対応):
+ *   - 新規シート「会」を追加(1行=1会)。upsertSessions アクションでupsert。
+ *   - 「対局一覧」シートに「会」列を追加(所属する会名。未所属は空欄)。
+ *     不足していれば ensureSheet_ が右端に自動追記(既存シートも無改造でアップグレード可)。
+ *   - GET ?action=list のレスポンスに sessions:[Session](全件・削除済み除く)を追加。
+ *   - 会の対局数・参加者は _raw から都度導出して書き込む(アプリ側では持たない)。
+ *
+ * v2.0 変更点(F-34 場代精算対応):
+ *   - 「対局一覧」シートに「場代」列を追加(未精算なら空欄、精算済みなら「3,000円/均等割り」のような表記)
+ *   - 「対局結果明細」シートに「場代負担」「最終支払円」列を追加
+ *   - ensureSheet_ 実行時にヘッダー行を検査し、既存シートに不足している列があれば
+ *     右端に自動追記するようにした(既存データ行・既存列順は一切変更しない。MUST)。
+ *     これにより v1.x で運用中のシートも、コード更新だけで新列が追加され、
+ *     手動でのシート編集は不要。
+ *   - upsertGames_ の行組み立てを「ヘッダー名→値」のマップ方式に変更し、
+ *     シートの実際の列順(新規シートは定義順、移行済み旧シートは追記された列が右端)
+ *     のどちらでも正しい列に値が入るようにした。
  *
  * v1.3 変更点: プレイヤーの削除(F-01)が同期されない設計上の抜けを修正。
  *   GameRecordの deleted:boolean と同じ論理削除方式をPlayerにも適用し、
@@ -23,7 +41,9 @@
  * c. 「プレイヤー」シートが v1.3 以前の4列(プレイヤーID/名前/登録日/状態)のまま
  *    残っている場合のみ、関数プルダウンで migratePlayersSheetV14 を選び1回実行する
  *    (5列レイアウトへ安全に移行。データは失われない。詳細は当該関数のコメント参照)。
- *    「対局一覧」「対局結果明細」「局履歴」「_raw」は形式変更なしのため何もしなくてよい。
+ *    「対局一覧」「対局結果明細」「局履歴」「_raw」は v2.0 で不足列(場代関連)がある場合、
+ *    次回のアクセス(doGet/doPost呼び出し)時に自動で右端に追記されるため、
+ *    手動での移行作業は不要。
  *
  * ─── デプロイ手順(新規) ───
  * 1. 新しい Google スプレッドシートを作成する
@@ -47,18 +67,21 @@ const SHEET_NAMES = {
   DETAIL: '対局結果明細',
   HISTORY: '局履歴',
   PLAYERS: 'プレイヤー',
+  SESSIONS: '会',
   RAW: '_raw',
 };
 
 const HEADERS = {
-  LIST: ['対局ID', '通しNo', '日時', 'モード', '所要分', '1位', '1位pt', '2位', '2位pt', '3位', '3位pt', '4位', '4位pt', 'フォルダー', 'メモ', '更新日時', '削除'],
-  DETAIL: ['対局ID', '日時', 'モード', 'プレイヤー', '順位', '最終持ち点', '素点', 'ウマ', 'オカ', '補正', '合計pt', '収支円', '焼き鳥'],
+  LIST: ['対局ID', '通しNo', '日時', 'モード', '所要分', '1位', '1位pt', '2位', '2位pt', '3位', '3位pt', '4位', '4位pt', 'フォルダー', '会', 'メモ', '場代', '更新日時', '削除'],
+  DETAIL: ['対局ID', '日時', 'モード', 'プレイヤー', '順位', '最終持ち点', '素点', 'ウマ', 'オカ', '補正', '合計pt', '収支円', '焼き鳥', '場代負担', '最終支払円'],
   HISTORY: ['対局ID', '連番', '局', '本場', '種別', '内容', '点数移動', '時刻'],
   PLAYERS: ['プレイヤーID', '名前', '登録日', '更新日時', '状態'],
+  SESSIONS: ['会ID', '会名', '開始日時', '終了日時', '対局数', '参加者', '場代', 'メモ', 'venue JSON', '更新日時', '削除'],
   RAW: ['対局ID', '更新日時', 'GameRecord JSON'],
 };
 
 const MODE_LABEL = { yonma: '4人麻雀', sanma: '3人麻雀', yonin_sanma: '4人3麻' };
+const VENUE_METHOD_LABEL = { equal: '均等割り', weighted: '傾斜', topExempt: 'トップ免除' };
 
 function jsonOut_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
@@ -73,6 +96,18 @@ function getSs_() {
   return SpreadsheetApp.getActiveSpreadsheet();
 }
 
+// ---- v2.0: 既存シートのヘッダーに不足があれば右端に自動追記する(既存データ・既存列順は変更しない。MUST) ----
+function migrateHeaderColumns_(sh, fullHeaders) {
+  const lastCol = sh.getLastColumn();
+  let headerRow = lastCol > 0 ? sh.getRange(1, 1, 1, lastCol).getValues()[0] : [];
+  const missing = fullHeaders.filter((h) => headerRow.indexOf(h) === -1);
+  if (missing.length > 0) {
+    sh.getRange(1, headerRow.length + 1, 1, missing.length).setValues([missing]);
+    headerRow = headerRow.concat(missing);
+  }
+  return headerRow;
+}
+
 function ensureSheet_(name, headers) {
   const ss = getSs_();
   let sh = ss.getSheetByName(name);
@@ -85,6 +120,9 @@ function ensureSheet_(name, headers) {
     if (name === SHEET_NAMES.LIST || name === SHEET_NAMES.DETAIL || name === SHEET_NAMES.HISTORY) {
       sh.getRange(2, 1).setNote('このシートは _raw から自動生成されるビューです。手動編集は次回同期で上書きされます。');
     }
+  } else if (name === SHEET_NAMES.LIST || name === SHEET_NAMES.DETAIL) {
+    // v2.0: 場代関連の新列が不足していれば右端に自動追記
+    migrateHeaderColumns_(sh, headers);
   }
   return sh;
 }
@@ -94,7 +132,13 @@ function ensureAllSheets_() {
   ensureSheet_(SHEET_NAMES.DETAIL, HEADERS.DETAIL);
   ensureSheet_(SHEET_NAMES.HISTORY, HEADERS.HISTORY);
   ensureSheet_(SHEET_NAMES.PLAYERS, HEADERS.PLAYERS);
+  ensureSheet_(SHEET_NAMES.SESSIONS, HEADERS.SESSIONS);
   ensureSheet_(SHEET_NAMES.RAW, HEADERS.RAW);
+}
+
+// ---- v2.0: ヘッダー名→値のマップから、シートの実際の列順に合わせた行配列を組み立てる ----
+function buildRowByHeader_(headerRow, valueMap) {
+  return headerRow.map((h) => (Object.prototype.hasOwnProperty.call(valueMap, h) ? valueMap[h] : ''));
 }
 
 function fmtDate_(ts) {
@@ -144,7 +188,8 @@ function doGet(e) {
       games.push({ id, updatedAt: new Date(data[r][1]).getTime(), deleted });
     }
     const players = readAllPlayers_();
-    return jsonOut_({ ok: true, games, players });
+    const sessions = readAllSessions_().filter((s) => !s.deleted);
+    return jsonOut_({ ok: true, games, players, sessions });
   }
   if (action === 'get') {
     if (!checkToken_(p.token)) return jsonOut_({ ok: false, error: 'unauthorized' });
@@ -190,6 +235,10 @@ function doPost(e) {
       upsertPlayers_(body.players || []);
       return jsonOut_({ ok: true });
     }
+    if (body.action === 'upsertSessions') {
+      upsertSessions_(body.sessions || []);
+      return jsonOut_({ ok: true });
+    }
     return jsonOut_({ ok: false, error: 'bad_request' });
   } finally {
     lock.releaseLock();
@@ -223,12 +272,106 @@ function loadPlayerNameMap_() {
   return map;
 }
 
+// ---- v2.1(F-35): 会(Session) ----
+function loadSessionNameMap_() {
+  const map = {};
+  readAllSessions_().forEach((s) => {
+    map[s.id] = s.name;
+  });
+  return map;
+}
+
+function readAllSessions_() {
+  const sh = ensureSheet_(SHEET_NAMES.SESSIONS, HEADERS.SESSIONS);
+  const data = sh.getDataRange().getValues();
+  const sessions = [];
+  for (let r = 1; r < data.length; r++) {
+    const id = data[r][0];
+    if (!id) continue;
+    let venue;
+    try {
+      venue = data[r][8] ? JSON.parse(data[r][8]) : undefined;
+    } catch (err) {
+      venue = undefined;
+    }
+    sessions.push({
+      id: id,
+      name: data[r][1],
+      startedAt: data[r][2] ? Date.parse(String(data[r][2]).replace(/\//g, '-')) || null : null,
+      endedAt: data[r][3] ? Date.parse(String(data[r][3]).replace(/\//g, '-')) || null : undefined,
+      memo: data[r][7] || undefined,
+      venue: venue,
+      updatedAt: data[r][9] ? Date.parse(String(data[r][9]).replace(/\//g, '-')) || null : null,
+      deleted: data[r][10] === 'TRUE' || data[r][10] === true,
+    });
+  }
+  return sessions;
+}
+
+// 対局数・参加者はGASが対局データ(_raw)から導出して書く(15.3)
+function upsertSessions_(sessions) {
+  const sh = ensureSheet_(SHEET_NAMES.SESSIONS, HEADERS.SESSIONS);
+  const rawSh = ensureSheet_(SHEET_NAMES.RAW, HEADERS.RAW);
+  const rawData = rawSh.getDataRange().getValues();
+  const nameMap = loadPlayerNameMap_();
+  sessions.forEach((s) => {
+    const row = findRowByFirstCol_(sh, s.id);
+    if (row > 0) {
+      const existingUpdatedAt = Date.parse(String(sh.getRange(row, 10).getValue()).replace(/\//g, '-')) || 0;
+      if (existingUpdatedAt > (s.updatedAt || 0)) return; // last-write-wins
+    }
+    // このセッションに属する対局を_rawから導出(対局数・参加者)
+    let gameCount = 0;
+    const playerIds = {};
+    for (let r = 1; r < rawData.length; r++) {
+      try {
+        const rec = JSON.parse(rawData[r][2]);
+        if (rec.sessionId === s.id && !rec.deleted) {
+          gameCount++;
+          (rec.seats || []).forEach((seat) => {
+            playerIds[seat.playerId] = true;
+          });
+        }
+      } catch (err) {
+        /* skip malformed row */
+      }
+    }
+    const participants = Object.keys(playerIds).map((pid) => nameMap[pid] || pid).join('・');
+    const venueLabel = s.venue ? formatComma_(s.venue.totalYen) + '円/' + (VENUE_METHOD_LABEL[s.venue.method] || s.venue.method) : '';
+    const rowData = [
+      s.id,
+      s.name,
+      fmtDate_(s.startedAt),
+      s.endedAt ? fmtDate_(s.endedAt) : '',
+      gameCount,
+      participants,
+      venueLabel,
+      s.memo || '',
+      s.venue ? JSON.stringify(s.venue) : '',
+      fmtDate_(s.updatedAt || Date.now()),
+      s.deleted ? 'TRUE' : 'FALSE',
+    ];
+    if (row > 0) sh.getRange(row, 1, 1, rowData.length).setValues([rowData]);
+    else sh.appendRow(rowData);
+  });
+}
+
+function formatComma_(n) {
+  if (n == null || isNaN(n)) return '';
+  return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
 function upsertGames_(games) {
   const rawSh = ensureSheet_(SHEET_NAMES.RAW, HEADERS.RAW);
   const listSh = ensureSheet_(SHEET_NAMES.LIST, HEADERS.LIST);
   const detailSh = ensureSheet_(SHEET_NAMES.DETAIL, HEADERS.DETAIL);
   const histSh = ensureSheet_(SHEET_NAMES.HISTORY, HEADERS.HISTORY);
   const nameMap = loadPlayerNameMap_(); // プレイヤーシートを正とする名前解決(v1.4)
+  const sessionNameMap = loadSessionNameMap_(); // v2.1(F-35): 会名解決
+
+  // v2.0: シートの実際のヘッダー行(新規は定義順、移行済み旧シートは追記列が右端)を取得
+  const listHeaderRow = listSh.getRange(1, 1, 1, listSh.getLastColumn()).getValues()[0];
+  const detailHeaderRow = detailSh.getRange(1, 1, 1, detailSh.getLastColumn()).getValues()[0];
 
   games.forEach((game) => {
     // ---- _raw upsert ----
@@ -246,40 +389,63 @@ function upsertGames_(games) {
 
     const ranked = (game.result || []).slice().sort((a, b) => a.rank - b.rank);
     const modeLabel = MODE_LABEL[game.mode] || game.mode;
-    const listRow = [
-      game.id,
-      game.serialNo,
-      fmtDate_(game.endedAt || game.startedAt),
-      modeLabel,
-      game.durationMin || '',
-    ];
+
+    // v2.0(F-34): 場代精算済みなら「3,000円/均等割り」のような表記。未精算なら空欄。
+    const venueLabel = game.venue
+      ? formatComma_(game.venue.totalYen) + '円/' + (VENUE_METHOD_LABEL[game.venue.method] || game.venue.method)
+      : '';
+    const venueBySeat = {};
+    if (game.venue && game.venue.settlements) {
+      game.venue.settlements.forEach((s) => {
+        venueBySeat[s.seat] = s;
+      });
+    }
+
+    const listValueMap = {
+      '対局ID': game.id,
+      '通しNo': game.serialNo,
+      '日時': fmtDate_(game.endedAt || game.startedAt),
+      'モード': modeLabel,
+      '所要分': game.durationMin || '',
+      'フォルダー': game.folderId || '',
+      '会': game.sessionId ? (sessionNameMap[game.sessionId] || '') : '',
+      'メモ': game.memo || '',
+      '場代': venueLabel,
+      '更新日時': fmtDate_(game.updatedAt),
+      '削除': game.deleted ? 'TRUE' : 'FALSE',
+    };
     for (let i = 0; i < 4; i++) {
+      const rankLabel = (i + 1) + '位';
       if (ranked[i]) {
-        listRow.push(playerNameOf_(game, ranked[i].playerId, nameMap), ranked[i].totalPt);
+        listValueMap[rankLabel] = playerNameOf_(game, ranked[i].playerId, nameMap);
+        listValueMap[rankLabel + 'pt'] = ranked[i].totalPt;
       } else {
-        listRow.push('', '');
+        listValueMap[rankLabel] = '';
+        listValueMap[rankLabel + 'pt'] = '';
       }
     }
-    listRow.push(game.folderId || '', game.memo || '', fmtDate_(game.updatedAt), game.deleted ? 'TRUE' : 'FALSE');
-    if (listSh.getLastRow() === 0) listSh.appendRow(HEADERS.LIST);
-    listSh.appendRow(listRow);
+    listSh.appendRow(buildRowByHeader_(listHeaderRow, listValueMap));
 
     (game.result || []).forEach((r) => {
-      detailSh.appendRow([
-        game.id,
-        fmtDate_(game.endedAt || game.startedAt),
-        modeLabel,
-        playerNameOf_(game, r.playerId, nameMap),
-        r.rank,
-        r.finalPoints,
-        r.rawPt,
-        r.umaPt,
-        r.okaPt,
-        r.bonusPt || 0,
-        r.totalPt,
-        r.yen != null ? r.yen : '',
-        r.yakitori ? 'TRUE' : 'FALSE',
-      ]);
+      const vs = venueBySeat[r.seat];
+      const detailValueMap = {
+        '対局ID': game.id,
+        '日時': fmtDate_(game.endedAt || game.startedAt),
+        'モード': modeLabel,
+        'プレイヤー': playerNameOf_(game, r.playerId, nameMap),
+        '順位': r.rank,
+        '最終持ち点': r.finalPoints,
+        '素点': r.rawPt,
+        'ウマ': r.umaPt,
+        'オカ': r.okaPt,
+        '補正': r.bonusPt || 0,
+        '合計pt': r.totalPt,
+        '収支円': r.yen != null ? r.yen : '',
+        '焼き鳥': r.yakitori ? 'TRUE' : 'FALSE',
+        '場代負担': vs ? vs.burdenYen : '',
+        '最終支払円': vs ? vs.finalYen : '',
+      };
+      detailSh.appendRow(buildRowByHeader_(detailHeaderRow, detailValueMap));
     });
 
     (game.events || []).forEach((ev, idx) => {

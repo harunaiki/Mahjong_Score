@@ -1,15 +1,20 @@
 <!DOCTYPE html>
 <!--
   雀点 - 麻雀点数記録Webアプリ
-  App Version: 1.4.7 (準拠する要件定義書・設計書 バージョン: 1.4 / 2026-07-19)
+  App Version: 2.1.0 (準拠する要件定義書・設計書 バージョン: 2.1 / 2026-07-20)
   単一HTMLファイル。ビルド不要。詳細はその他タブ > アプリ > バージョン情報を参照。
+  v2.0: F-31(結果共有画像)/F-32(QR・URLデータ共有)/F-33(プレイヤー詳細統計)/F-34(場代精算)を追加。
+  v2.1: 精算総点検(焼き鳥/箱下ボーナス/チップ/同点山分け)・設定選択制(7.6)・
+        タップ/長押し実装要件(6.2.4)・入力シート回転(6.3.6)・F-35(会)・F-36(音声読み上げ)を追加。
 -->
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<meta name="application-version" content="1.4.7">
+<meta name="application-version" content="2.1.0">
 <title>雀点 - 麻雀点数記録</title>
+<!-- F-32用: QRコード生成(2章で許可された唯一の追加CDNライブラリの一つ) -->
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <style>
 :root{
   --bg:#f2f2f5;
@@ -297,6 +302,55 @@ label.flabel{font-size:12.5px;color:var(--sub);display:block;margin:12px 14px 4p
 .settle-info-block .l2{font-size:12.5px;color:var(--sub);}
 .settle-info-block .l3{font-size:14px;font-weight:700;color:var(--accent);}
 .settle-info-line{font-size:13px;padding:4px 0;color:var(--text);}
+
+/* ===== v2.0: 6.14 場代精算(F-34) ===== */
+.venue-row{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line);font-size:13.5px;}
+.venue-row:last-child{border-bottom:none;}
+.venue-row .nm{font-weight:700;}
+.venue-row .sub{color:var(--sub);font-size:12px;}
+.venue-row .final{font-size:16px;font-weight:800;font-variant-numeric:tabular-nums;}
+.venue-row .final.pos{color:var(--plus);}
+.venue-row .final.neg{color:var(--minus);}
+.venue-weights{display:flex;gap:8px;padding:0 14px 10px;flex-wrap:wrap;}
+.venue-weights .wcell{flex:1;min-width:60px;}
+.venue-weights .wcell label{font-size:11px;color:var(--sub);display:block;margin-bottom:2px;}
+.venue-weights .wcell input{width:100%;border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:13px;text-align:center;}
+.venue-check-row{padding:8px 14px;font-size:12.5px;text-align:center;}
+.venue-check-row.ok{color:var(--green-felt);}
+.venue-check-row.err{color:var(--red);font-weight:700;}
+.venue-transfer{padding:6px 14px;font-size:13px;display:flex;justify-content:space-between;border-bottom:1px solid var(--line);}
+.venue-transfer:last-child{border-bottom:none;}
+.stepper-row{display:flex;align-items:center;gap:10px;padding:0 14px 10px;}
+.stepper-row input{flex:1;text-align:center;font-size:18px;font-weight:800;}
+.stepper-btn{width:40px;height:40px;border-radius:50%;background:var(--bg);font-size:20px;font-weight:800;flex-shrink:0;}
+
+/* ===== v2.0: 6.11 結果共有画像(F-31) ===== */
+.share-preview-img{width:100%;border-radius:12px;display:block;margin-top:6px;box-shadow:0 2px 10px rgba(0,0,0,.15);}
+.share-action-row{display:flex;flex-direction:column;gap:0;}
+.share-action-row button.list-row{width:100%;text-align:left;background:none;}
+
+/* ===== v2.0: 6.12 QR/URLデータ共有(F-32) ===== */
+.qr-wrap{display:flex;justify-content:center;padding:14px;}
+.qr-wrap svg,.qr-wrap canvas{width:min(70vw,260px);height:min(70vw,260px);}
+.share-url-box{margin:0 14px;padding:10px 12px;background:var(--bg);border-radius:10px;font-size:11px;
+  color:var(--sub);word-break:break-all;max-height:60px;overflow:hidden;}
+.select-toolbar{position:sticky;bottom:calc(64px + var(--safe-bottom));left:0;right:0;background:#fff;
+  border-top:1px solid var(--line);padding:10px 14px;display:flex;gap:10px;justify-content:flex-end;z-index:15;}
+.game-list-card.selectable{padding-left:44px;position:relative;}
+.game-list-card .sel-check{position:absolute;left:12px;top:14px;width:22px;height:22px;border-radius:50%;
+  border:2px solid var(--line);background:#fff;}
+.game-list-card .sel-check.checked{background:var(--accent);border-color:var(--accent);color:#fff;
+  display:flex;align-items:center;justify-content:center;font-size:13px;}
+
+/* ===== v2.0: 6.13 プレイヤー詳細統計(F-33) ===== */
+.rankbar{display:flex;height:26px;border-radius:8px;overflow:hidden;margin:10px 14px 6px;}
+.rankbar .seg{display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:700;}
+.metric-grid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);border-radius:12px;overflow:hidden;margin:10px 12px;}
+.metric-cell{background:#fff;padding:12px 14px;}
+.metric-cell .v{font-size:20px;font-weight:800;font-variant-numeric:tabular-nums;}
+.metric-cell .l{font-size:11.5px;color:var(--sub);margin-top:2px;}
+.rival-row{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line);font-size:13px;}
+.rival-row:last-child{border-bottom:none;}
 </style>
 </head>
 <body>
@@ -311,13 +365,13 @@ label.flabel{font-size:12.5px;color:var(--sub);display:block;margin:12px 14px 4p
 <script>
 'use strict';
 // ==== version ==== 要件定義書・設計書のバージョンに追従
-const APP_VERSION = '1.4.7';
-const SPEC_VERSION = '1.4';
-const BUILD_DATE = '2026-07-19';
+const APP_VERSION = '2.1.0';
+const SPEC_VERSION = '2.1';
+const BUILD_DATE = '2026-07-20';
 // ==== config ====(デプロイ時にここへ自分のGAS URLと合言葉を記入する。15.5)
 // 個人サーバーにこのファイルを1枚置く運用を想定: ここに値を入れておけば、
 // どの端末で開いても入力なしで同期が有効になる(localStorageの値があればそちらが優先)。
-const APP_CONFIG = { gasUrl: 'https://script.google.com/macros/s/AKfycbymH4eEynuRgxacjKyttYtMZOFqmFNiwPzbGj-m-JnxfeHcQY0OA79Ec5bSs4puQbcO/exec', token: '1234' };
+const APP_CONFIG = { gasUrl: '', token: '' };
 // ==================================================================
 // ==== domain ==== (pure functions, no DOM) — 8章・9章準拠
 // Node-testable module. Will be inlined into index.html <script> later.
@@ -441,37 +495,140 @@ const domain = (function () {
     }
   }
 
-  function settleGame(finalPoints, seatCount, rules) {
-    // finalPoints: array of {seat, points} length = seatCount
+  // 0.1pt単位切り捨て+余りを先頭(=起家/上位に近い順)から+0.1ptずつ配分し、合計を厳密に一致させる
+  function splitWithRemainder(total, n) {
+    if (n <= 0) return [];
+    const base = Math.floor((total / n) * 10) / 10;
+    const distributed = Math.round(base * n * 10) / 10;
+    let remainderUnits = Math.round((total - distributed) * 10);
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      let v = base;
+      if (i < remainderUnits) v = Math.round((v + 0.1) * 10) / 10;
+      out.push(v);
+    }
+    return out;
+  }
+
+  // ---- v2.1(8.5.1): 焼き鳥ptの授受(唯一の正) ----
+  // seatsInRankOrder: 最終順位順(1位→最下位)の席番号配列。yakitoriSeats: 焼き鳥(未和了)の席番号配列。
+  function yakitoriSettlement(seatsInRankOrder, yakitoriSeats, method, P) {
+    const result = {};
+    seatsInRankOrder.forEach((s) => (result[s] = 0));
+    if (!P) return result;
+    const yakiSet = new Set(yakitoriSeats || []);
+    const yakitoriList = seatsInRankOrder.filter((s) => yakiSet.has(s));
+    const nonYakitoriList = seatsInRankOrder.filter((s) => !yakiSet.has(s));
+    const y = yakitoriList.length;
+    const m = nonYakitoriList.length;
+    if (y === 0 || m === 0) return result;
+    if (method === 'perPlayer') {
+      yakitoriList.forEach((s) => (result[s] = -P * m));
+      nonYakitoriList.forEach((s) => (result[s] = P * y));
+    } else if (method === 'topTake') {
+      yakitoriList.forEach((s) => (result[s] = -P));
+      result[nonYakitoriList[0]] = (result[nonYakitoriList[0]] || 0) + P * y;
+    } else {
+      // share(山分け・デフォルト)
+      yakitoriList.forEach((s) => (result[s] = -P));
+      const shares = splitWithRemainder(P * y, m);
+      nonYakitoriList.forEach((s, i) => (result[s] = shares[i]));
+    }
+    return result;
+  }
+
+  // ---- v2.1(8.5.2): 箱下ボーナスの授受(唯一の正) ----
+  // finalPointsBySeat: { seat: 終局時持ち点 }。bustCausedBy: [{seat, bySeat?}] (bySeat省略=飛ばした者なし)
+  function bustBonusSettlement(seatsInRankOrder, finalPointsBySeat, bustCausedBy, N) {
+    const result = {};
+    seatsInRankOrder.forEach((s) => (result[s] = 0));
+    if (!N) return result;
+    const bustedSeats = seatsInRankOrder.filter((s) => (finalPointsBySeat[s] || 0) < 0);
+    if (bustedSeats.length === 0) return result;
+    let leftoverForTop = 0;
+    bustedSeats.forEach((seat) => {
+      result[seat] -= N;
+      const causer = (bustCausedBy || []).find((b) => b.seat === seat);
+      if (causer && causer.bySeat != null) {
+        result[causer.bySeat] = (result[causer.bySeat] || 0) + N;
+      } else {
+        leftoverForTop += N;
+      }
+    });
+    if (leftoverForTop > 0) {
+      const top = seatsInRankOrder[0];
+      result[top] = (result[top] || 0) + leftoverForTop;
+    }
+    return result;
+  }
+
+  // extras = { yakitoriSeats?: number[], bustCausedBy?: {seat, bySeat?}[], chipCounts?: {[seat]: number} }
+  // chipCounts: 席番号→チップ枚数の増減(最終枚数−初期枚数)。ptには影響せず円換算にのみ加算。
+  function settleGame(finalPoints, seatCount, rules, extras) {
+    extras = extras || {};
     const returnPoints = rules.returnPoints;
     const startPoints = rules.startPoints;
     const uma = rules.uma;
+    const finalPointsBySeat = {};
+    finalPoints.forEach((p) => (finalPointsBySeat[p.seat] = p.points));
 
-    const raw = finalPoints.map((p) => ({
-      seat: p.seat,
-      points: p.points,
-      rawPt10: (p.points - returnPoints) / 100, // in units of 0.1pt *10 to avoid fp issues -> divide later
-    }));
-
-    // rank: by points desc, tie -> tieBreak
-    const ranked = [...raw].sort((a, b) => {
+    // 順位グループ化(同点はtieBreakに応じて処理)
+    const sorted = [...finalPoints].sort((a, b) => {
       if (b.points !== a.points) return b.points - a.points;
-      if (rules.tieBreak === 'split') return a.seat - b.seat; // stable, split handled outside
-      return a.seat - b.seat; // seatOrder: lower seat index (closer to dealer) wins
+      return a.seat - b.seat; // 起家に近い(席番号が小さい)方を上位とする既定の並び
+    });
+    const groups = [];
+    sorted.forEach((r) => {
+      const g = groups[groups.length - 1];
+      if (g && g[0].points === r.points && rules.tieBreak === 'split') g.push(r);
+      else groups.push([r]);
     });
 
     const oka = ((returnPoints - startPoints) * seatCount) / 1000;
-
-    const results = ranked.map((r, idx) => {
-      const rank = idx + 1;
-      const rawPt = (r.points - returnPoints) / 1000;
-      const umaPt = uma[idx] !== undefined ? uma[idx] : 0;
-      const okaPt = rank === 1 ? oka : 0;
-      const totalPtExact = rawPt + umaPt + okaPt;
-      return { seat: r.seat, points: r.points, rank, rawPt, umaPt, okaPt, totalPtExact };
+    const results = [];
+    const seatsInRankOrder = [];
+    let rankCursor = 1;
+    groups.forEach((group) => {
+      const rankStart = rankCursor;
+      const size = group.length;
+      if (size > 1) {
+        // 同点山分け(8.5手順2)
+        let umaSum = 0;
+        for (let k = 0; k < size; k++) umaSum += uma[rankStart - 1 + k] !== undefined ? uma[rankStart - 1 + k] : 0;
+        const umaShares = splitWithRemainder(umaSum, size);
+        const includesTop = rankStart === 1;
+        const okaShares = includesTop ? splitWithRemainder(oka, size) : group.map(() => 0);
+        group.forEach((r, i) => {
+          const rawPt = (r.points - returnPoints) / 1000;
+          results.push({ seat: r.seat, points: r.points, rank: rankStart, rawPt, umaPt: umaShares[i], okaPt: okaShares[i] });
+          seatsInRankOrder.push(r.seat);
+        });
+      } else {
+        const r = group[0];
+        const rank = rankStart;
+        const rawPt = (r.points - returnPoints) / 1000;
+        const umaPt = uma[rank - 1] !== undefined ? uma[rank - 1] : 0;
+        const okaPt = rank === 1 ? oka : 0;
+        results.push({ seat: r.seat, points: r.points, rank, rawPt, umaPt, okaPt });
+        seatsInRankOrder.push(r.seat);
+      }
+      rankCursor += size;
     });
 
-    // apply rounding to each, then adjust diff onto rank1 so sum = 0
+    // 8.5.1/8.5.2: 焼き鳥pt・箱下ボーナスptを順位確定後に加算(bonusPtとして計上)
+    const yakitoriPt = rules.yakitori && rules.yakitori.enabled
+      ? yakitoriSettlement(seatsInRankOrder, extras.yakitoriSeats, rules.yakitori.method || 'share', rules.yakitori.penaltyPt)
+      : {};
+    const bustBonusPt = rules.bustBonus && rules.bustBonus.enabled
+      ? bustBonusSettlement(seatsInRankOrder, finalPointsBySeat, extras.bustCausedBy, rules.bustBonus.pt)
+      : {};
+    results.forEach((r) => {
+      const bonusPt = Math.round((((yakitoriPt[r.seat] || 0) + (bustBonusPt[r.seat] || 0)) * 10)) / 10;
+      r.bonusPt = bonusPt;
+      r.totalPtExact = r.rawPt + r.umaPt + r.okaPt + bonusPt;
+    });
+
+    // 端数処理を各pt_iに適用し、合計0になるよう1位へ差分を寄せる
     let sum = 0;
     results.forEach((r) => {
       r.totalPt = round(r.totalPtExact, rules.rounding);
@@ -480,6 +637,13 @@ const domain = (function () {
     if (sum !== 0) {
       const top = results.find((r) => r.rank === 1);
       top.totalPt = Math.round((top.totalPt - sum) * 10) / 10;
+    }
+
+    // v2.1: チップ円(ptには含めない。円換算にのみ加算)
+    if (rules.chip && rules.chip.enabled && extras.chipCounts) {
+      results.forEach((r) => {
+        r.chipYen = (extras.chipCounts[r.seat] || 0) * rules.chip.valuePerChip;
+      });
     }
     return results;
   }
@@ -516,11 +680,62 @@ const domain = (function () {
     }
   }
 
+  // v2.1: state.points があれば箱下判定(rules.bustEnd)も同一関数で完結させる(判定一元化MUST)
   function isGameEnd(state, rules) {
+    if (rules.bustEnd && Array.isArray(state.points) && state.points.some((p) => p < 0)) {
+      return true;
+    }
     const lastRound = rules.length === 'tonpu' ? 'E' : rules.length === 'hanchan' ? 'S' : 'W';
     const idx = ROUND_ORDER.indexOf(state.round);
     const lastIdx = ROUND_ORDER.indexOf(lastRound);
     return idx > lastIdx || (idx === lastIdx && state.kyokuNum > 4);
+  }
+
+  // ---- 6.14.3 場代精算(F-34。唯一の正) ----
+  // seatsByRank: 順位順(1位→最下位)の席番号配列
+  // weights: method='weighted'時のみ。順位順%(合計100)
+  // betYenBySeat: { [seat]: 賭け収支円(賭け無効時は0) }
+  function venueSettlement(totalYen, method, weights, seatsByRank, betYenBySeat) {
+    const n = seatsByRank.length;
+    let raw;
+    if (method === 'topExempt') {
+      raw = seatsByRank.map((_, i) => (i === 0 ? 0 : totalYen / (n - 1)));
+    } else if (method === 'weighted') {
+      raw = seatsByRank.map((_, i) => (totalYen * ((weights && weights[i]) || 0)) / 100);
+    } else {
+      raw = seatsByRank.map(() => totalYen / n);
+    }
+    // 2) 10円単位に切り上げ
+    const burden = raw.map((v) => Math.ceil(v / 10) * 10);
+    // 3) 過徴収額を上位から10円ずつ減じて一致させる
+    let over = burden.reduce((a, b) => a + b, 0) - totalYen;
+    let idx = 0;
+    let guard = 0;
+    while (over > 0 && guard < n * 200) {
+      if (burden[idx] >= 10) {
+        burden[idx] -= 10;
+        over -= 10;
+      }
+      idx = (idx + 1) % n;
+      guard++;
+    }
+    return seatsByRank.map((seat, i) => {
+      const betYen = (betYenBySeat && betYenBySeat[seat]) || 0;
+      const burdenYen = burden[i];
+      return { seat, betYen, burdenYen, finalYen: betYen - burdenYen };
+    });
+  }
+
+  // 立替者Pを介した星型送金リスト。Pが未指定ならば空配列。
+  function venueTransfers(settlements, payerSeat) {
+    if (payerSeat == null || payerSeat < 0) return [];
+    const list = [];
+    settlements.forEach((s) => {
+      if (s.seat === payerSeat) return;
+      if (s.finalYen < 0) list.push({ from: s.seat, to: payerSeat, amount: -s.finalYen });
+      else if (s.finalYen > 0) list.push({ from: payerSeat, to: s.seat, amount: s.finalYen });
+    });
+    return list;
   }
 
   return {
@@ -535,6 +750,11 @@ const domain = (function () {
     isGameEnd,
     ceil100,
     ROUND_ORDER,
+    venueSettlement,
+    venueTransfers,
+    yakitoriSettlement,
+    bustBonusSettlement,
+    splitWithRemainder,
   };
 })();
 
@@ -769,7 +989,7 @@ const engine = (function () {
       s = applyEvent(s, game, ev);
     });
     s.finished = domain.isGameEnd(
-      { round: s.round, kyokuNum: s.kyokuNum },
+      { round: s.round, kyokuNum: s.kyokuNum, points: s.points },
       game.rules
     );
     return s;
@@ -843,6 +1063,7 @@ const storage = (function () {
     rules: (mode) => 'mj.rules.' + mode,
     rulePresets: 'mj.rulePresets',
     folders: 'mj.folders',
+    sessions: 'mj.sessions',
     shareLogs: 'mj.shareLogs',
     app: 'mj.app',
     syncQueue: 'mj.sync.queue',
@@ -857,7 +1078,7 @@ const storage = (function () {
       bustEnd: true,
       notenPenaltyTotal: 3000,
       honbaValue: 300,
-      yakitori: { enabled: false, penaltyPt: 10 },
+      yakitori: { enabled: false, penaltyPt: 10, method: 'share' },
       rounding: 'round',
       bustBonus: { enabled: false, pt: 10 },
       tieBreak: 'seatOrder',
@@ -936,6 +1157,16 @@ const storage = (function () {
   function setFolders(v) {
     set(K.folders, v);
   }
+  // ---- v2.1(F-35): 会(セッション) ----
+  function getSessions() {
+    return get(K.sessions, []);
+  }
+  function setSessions(v) {
+    set(K.sessions, v);
+  }
+  function getActiveSession() {
+    return getSessions().find((s) => !s.endedAt && !s.deleted) || null;
+  }
   function getShareLogs() {
     return get(K.shareLogs, []);
   }
@@ -987,6 +1218,9 @@ const storage = (function () {
     nextSerial,
     getFolders,
     setFolders,
+    getSessions,
+    setSessions,
+    getActiveSession,
     getShareLogs,
     setShareLogs,
     getPresets,
@@ -1069,6 +1303,9 @@ const sync = (function () {
   function upsertPlayers(players) {
     return postAction('upsertPlayers', { players });
   }
+  function upsertSessions(sessions) {
+    return postAction('upsertSessions', { sessions });
+  }
 
   // 送信キューを順に処理。オフライン/失敗時はキューに残す。
   async function flushQueue() {
@@ -1082,6 +1319,7 @@ const sync = (function () {
       let res;
       if (item.kind === 'games') res = await upsertGames(item.payload);
       else if (item.kind === 'players') res = await upsertPlayers(item.payload);
+      else if (item.kind === 'sessions') res = await upsertSessions(item.payload);
       else res = { ok: true };
       if (!res || !res.ok) break; // stop, keep remaining in queue
       q.shift();
@@ -1100,6 +1338,10 @@ const sync = (function () {
   }
   function queuePlayersSave(players) {
     storage.queuePush('players', players);
+  }
+  function queueSessionSave(sessionOrSessions) {
+    const sessions = Array.isArray(sessionOrSessions) ? sessionOrSessions : [sessionOrSessions];
+    if (sessions.length) storage.queuePush('sessions', sessions);
   }
 
   // 起動時/戦績タブ表示時の取得マージ(last-write-wins)
@@ -1144,10 +1386,315 @@ const sync = (function () {
       });
       if (mergedPlayers > 0) storage.setPlayers(localPlayers);
     }
-    return { ok: true, merged: mergedGames, mergedPlayers };
+    // v2.1(F-35): listに含まれる全Session(last-write-wins)
+    let mergedSessions = 0;
+    if (Array.isArray(listRes.sessions)) {
+      const localSessions = storage.getSessions();
+      const localSById = Object.fromEntries(localSessions.map((s) => [s.id, s]));
+      listRes.sessions.forEach((rs) => {
+        const ls = localSById[rs.id];
+        if (!ls) {
+          localSessions.push(rs);
+          localSById[rs.id] = rs;
+          mergedSessions++;
+        } else if ((ls.updatedAt || 0) < (rs.updatedAt || 0)) {
+          Object.assign(ls, rs);
+          mergedSessions++;
+        }
+      });
+      if (mergedSessions > 0) storage.setSessions(localSessions);
+    }
+    return { ok: true, merged: mergedGames, mergedPlayers, mergedSessions };
   }
 
-  return { cfg, isConfigured, ping, list, getGames, upsertGames, upsertPlayers, flushQueue, queueGameSave, queuePlayersSave, pullAndMerge };
+  return { cfg, isConfigured, ping, list, getGames, upsertGames, upsertPlayers, upsertSessions, flushQueue, queueGameSave, queuePlayersSave, queueSessionSave, pullAndMerge };
+})();
+
+// ==== stats ==== プレイヤー詳細統計(F-33・6.13.2 唯一の正)。派生データのみ、DOM非依存の純粋関数群。
+const stats = (function () {
+  'use strict';
+
+  // events を保持し(空でなく)、容量圧縮で欠落していない対局のみ「局単位の指標」の分母に含める
+  function hasEventLog(g) {
+    return Array.isArray(g.events) && g.events.length > 0 && !g.eventsTruncated;
+  }
+
+  // 1対局・1プレイヤーぶんのイベント再生集計(和了率等の分子・分母の元データ)
+  function computeEventStats(game, seatIdx) {
+    let s = engine.initialState(game);
+    let participatedKyoku = 0,
+      wins = 0,
+      deals = 0,
+      riichis = 0,
+      chombo = 0,
+      tsumoWins = 0,
+      sumWinPoints = 0,
+      winCount = 0;
+    (game.events || []).forEach((ev) => {
+      const benchIdx = s.benchIdx;
+      if (ev.type === 'RIICHI' && ev.seat === seatIdx) riichis++;
+      if (ev.type === 'RIICHI_CANCEL' && ev.seat === seatIdx) riichis--;
+      if (ev.type === 'WIN' || ev.type === 'DRAW') {
+        const isBench = game.mode === 'yonin_sanma' && benchIdx === seatIdx;
+        if (!isBench) participatedKyoku++;
+      }
+      if (ev.type === 'WIN') {
+        ev.winners.forEach((w) => {
+          if (w.seat !== seatIdx) return;
+          wins++;
+          if (ev.method === 'tsumo') tsumoWins++;
+          let total;
+          if (w.directPoints != null) total = w.directPoints;
+          else {
+            const role = w.seat === s.dealerIdx ? 'dealer' : 'child';
+            total = domain.winPayments(w.han, w.fu, role, ev.method).total;
+          }
+          sumWinPoints += total;
+          winCount++;
+        });
+        if (ev.method === 'ron' && ev.loserSeat === seatIdx) deals++;
+      }
+      if (ev.type === 'CHOMBO' && ev.seat === seatIdx) chombo++;
+      s = engine.applyEvent(s, game, ev);
+    });
+    return { participatedKyoku, wins, deals, riichis: Math.max(0, riichis), chombo, tsumoWins, sumWinPoints, winCount };
+  }
+
+  // プレイスタイル指標(和了率・放銃率・リーチ率・ツモ率・平均打点・チョンボ回数)
+  function styleMetrics(games, playerId) {
+    const evGames = games.filter(hasEventLog);
+    let totalKyoku = 0, wins = 0, deals = 0, riichis = 0, chombo = 0, tsumoWins = 0, sumWinPoints = 0, winCount = 0, usedGames = 0;
+    evGames.forEach((g) => {
+      const seat = g.seats.findIndex((s) => s.playerId === playerId);
+      if (seat < 0) return;
+      usedGames++;
+      const r = computeEventStats(g, seat);
+      totalKyoku += r.participatedKyoku;
+      wins += r.wins;
+      deals += r.deals;
+      riichis += r.riichis;
+      chombo += r.chombo;
+      tsumoWins += r.tsumoWins;
+      sumWinPoints += r.sumWinPoints;
+      winCount += r.winCount;
+    });
+    return {
+      evGameCount: usedGames,
+      totalKyoku,
+      winRate: totalKyoku ? wins / totalKyoku : null,
+      dealRate: totalKyoku ? deals / totalKyoku : null,
+      riichiRate: totalKyoku ? riichis / totalKyoku : null,
+      tsumoRate: wins ? tsumoWins / wins : null,
+      avgWinPoints: winCount ? Math.round(sumWinPoints / winCount) : null,
+      chombo,
+      wins,
+      deals,
+    };
+  }
+
+  // サマリ・順位分布・pt推移(result由来。eventsの有無に依存しない)
+  function summary(games, playerId) {
+    const participated = games.filter((g) => (g.result || []).some((r) => r.playerId === playerId));
+    const sorted = [...participated].sort((a, b) => (a.endedAt || a.startedAt) - (b.endedAt || b.startedAt));
+    let sumPt = 0, sumYen = 0, rankSum = 0, lastCount = 0, rentaiCount = 0, cum = 0;
+    const rankCounts = {};
+    const trend = [];
+    let maxSeats = 0;
+    sorted.forEach((g) => {
+      const r = g.result.find((x) => x.playerId === playerId);
+      sumPt += r.totalPt;
+      sumYen += r.yen || 0;
+      rankSum += r.rank;
+      rankCounts[r.rank] = (rankCounts[r.rank] || 0) + 1;
+      if (r.rank === g.seats.length) lastCount++;
+      if (r.rank <= 2) rentaiCount++;
+      cum += r.totalPt;
+      maxSeats = Math.max(maxSeats, g.seats.length);
+      trend.push({ at: g.endedAt || g.startedAt, cum, serialNo: g.serialNo });
+    });
+    const n = participated.length;
+    return {
+      count: n,
+      sumPt,
+      sumYen,
+      avgRank: n ? rankSum / n : 0,
+      rankCounts,
+      maxSeats,
+      lastAvoidRate: n ? 1 - lastCount / n : 0,
+      rentaiRate: n ? rentaiCount / n : 0,
+      trend: trend.slice(-50),
+    };
+  }
+
+  // 直対収支(6.13.2)
+  function rivalStats(games, playerId) {
+    const participated = games.filter((g) => (g.result || []).some((r) => r.playerId === playerId));
+    const map = {};
+    participated.forEach((g) => {
+      const me = g.result.find((r) => r.playerId === playerId);
+      g.result.forEach((r) => {
+        if (r.playerId === playerId) return;
+        if (!map[r.playerId]) map[r.playerId] = { count: 0, ptSum: 0, win: 0, lose: 0 };
+        const m = map[r.playerId];
+        m.count++;
+        m.ptSum += me.totalPt;
+        if (me.rank < r.rank) m.win++;
+        else if (me.rank > r.rank) m.lose++;
+      });
+    });
+    return Object.entries(map)
+      .map(([pid, v]) => Object.assign({ playerId: pid }, v))
+      .sort((a, b) => b.ptSum - a.ptSum);
+  }
+
+  function filterGames(games, mode, period) {
+    let list = games.filter((g) => g.status === 'finished' && !g.deleted);
+    if (mode && mode !== 'all') list = list.filter((g) => g.mode === mode);
+    if (period && period.from != null) list = list.filter((g) => (g.endedAt || g.startedAt) >= period.from);
+    if (period && period.to != null) list = list.filter((g) => (g.endedAt || g.startedAt) <= period.to);
+    return list;
+  }
+
+  return { hasEventLog, computeEventStats, styleMetrics, summary, rivalStats, filterGames };
+})();
+
+// ==== share ==== 結果共有画像(F-31)・QR/URLデータ共有(F-32)の非DOM純粋関数(6.11〜6.12)
+const share = (function () {
+  'use strict';
+
+  function b64urlEncode(bytes) {
+    let bin = '';
+    bytes.forEach((b) => (bin += String.fromCharCode(b)));
+    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  function b64urlDecode(str) {
+    str = str.replace(/-/g, '+').replace(/_/g, '/');
+    while (str.length % 4) str += '=';
+    const bin = atob(str);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes;
+  }
+
+  async function compress(str) {
+    const input = new TextEncoder().encode(str);
+    if (typeof CompressionStream === 'undefined') return { raw: true, bytes: input };
+    const cs = new CompressionStream('deflate-raw');
+    const writer = cs.writable.getWriter();
+    writer.write(input);
+    writer.close();
+    const buf = await new Response(cs.readable).arrayBuffer();
+    return { raw: false, bytes: new Uint8Array(buf) };
+  }
+  async function decompress(bytes, raw) {
+    if (raw) return new TextDecoder().decode(bytes);
+    if (typeof DecompressionStream === 'undefined') throw new Error('unsupported_decompress');
+    const ds = new DecompressionStream('deflate-raw');
+    const writer = ds.writable.getWriter();
+    writer.write(bytes);
+    writer.close();
+    const buf = await new Response(ds.readable).arrayBuffer();
+    return new TextDecoder().decode(buf);
+  }
+
+  // 6.12.3: SharePayload → #import= 用文字列(base64url。非対応環境は raw: プレフィックス)
+  async function encodePayload(payload) {
+    const json = JSON.stringify(payload);
+    const comp = await compress(json);
+    const b64 = b64urlEncode(comp.bytes);
+    return (comp.raw ? 'raw:' : '') + b64;
+  }
+  async function decodePayload(encoded) {
+    let raw = false, b64 = encoded;
+    if (encoded.indexOf('raw:') === 0) {
+      raw = true;
+      b64 = encoded.slice(4);
+    }
+    const bytes = b64urlDecode(b64);
+    const json = await decompress(bytes, raw);
+    return JSON.parse(json);
+  }
+
+  return { compress, decompress, encodePayload, decodePayload, b64urlEncode, b64urlDecode };
+})();
+
+// ==== voice ==== 音声読み上げ(F-36。6.16。Web Speech API。非対応環境は無音でスキップ)
+const voice = (function () {
+  'use strict';
+  const supported = typeof window !== 'undefined' && 'speechSynthesis' in window;
+  let jaVoice = null;
+  let voicesReady = false;
+  function pickVoice() {
+    if (!supported) return null;
+    const list = window.speechSynthesis.getVoices();
+    if (list && list.length) {
+      voicesReady = true;
+      jaVoice = list.find((v) => v.lang === 'ja-JP') || list.find((v) => (v.lang || '').indexOf('ja') === 0) || null;
+    }
+    return jaVoice;
+  }
+  if (supported) {
+    pickVoice();
+    if (typeof window.speechSynthesis.addEventListener === 'function') {
+      window.speechSynthesis.addEventListener('voiceschanged', pickVoice);
+    }
+  }
+  function speak(text) {
+    if (!supported || !text) return;
+    try {
+      window.speechSynthesis.cancel(); // MUST: 直前の発話を打ち切る
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = 'ja-JP';
+      u.rate = 1.0;
+      u.pitch = 1.0;
+      if (!voicesReady) pickVoice();
+      if (jaVoice) u.voice = jaVoice;
+      window.speechSynthesis.speak(u);
+    } catch (e) {
+      /* noop: 非対応環境は無音でスキップ(エラー表示しない) */
+    }
+  }
+  function cancel() {
+    if (supported) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch (e) {
+        /* noop */
+      }
+    }
+  }
+  // ---- 6.16: 読み上げ文言の組み立て(唯一の正) ----
+  function scoreLabelFor(han, fu) {
+    if (han >= 13) return (Math.floor(han / 13) > 1 ? Math.floor(han / 13) + '倍役満' : '役満');
+    if (han >= 11) return '三倍満';
+    if (han >= 8) return '倍満';
+    if (han >= 6) return '跳満';
+    if (han >= 5) return '満貫';
+    return han + '翻' + fu + '符';
+  }
+  function speakWin(ev, payDetail, isDealer) {
+    // payDetail: { total, dealerPays, childPays, childEach, allSame } (domain.winPaymentsの戻り値。directPointsの場合はnull)
+    ev.winners.forEach((w) => {
+      let scoreTxt;
+      if (w.directPoints != null) {
+        scoreTxt = w.directPoints + '点';
+      } else {
+        scoreTxt = scoreLabelFor(w.han, w.fu) + (w.han < 5 ? '' : '');
+      }
+      if (ev.method === 'ron') {
+        const total = w.directPoints != null ? w.directPoints : payDetail && payDetail.total;
+        speak('ロン、' + (w.directPoints != null ? '' : scoreTxt + '、') + (total != null ? total + '点' : ''));
+      } else if (isDealer) {
+        const each = w.directPoints != null ? w.directPoints : payDetail && (payDetail.detail ? payDetail.detail.childEach : payDetail.childEach);
+        speak('ツモ、' + (w.directPoints != null ? '' : scoreTxt + '、') + (each != null ? each + '点オール' : ''));
+      } else {
+        const cp = payDetail && (payDetail.detail ? payDetail.detail.childPays : payDetail.childPays);
+        const dp = payDetail && (payDetail.detail ? payDetail.detail.dealerPays : payDetail.dealerPays);
+        speak('ツモ、' + (w.directPoints != null ? '' : scoreTxt + '、') + (cp != null ? cp + '点、' + dp + '点' : ''));
+      }
+    });
+  }
+  return { supported, speak, cancel, speakWin, scoreLabelFor };
 })();
 
 // ==== ui ==== 画面描画・イベント処理
@@ -1167,6 +1714,10 @@ const ui = (function () {
     settingsMode: 'yonma',
     timerHandle: null,
     wakeLockObj: null,
+    // v2.0 追加
+    selectMode: false,
+    selectedIds: [],
+    playerStatsFilter: { mode: 'all', period: 'all' },
   };
 
   const WINDS4 = ['東', '南', '西', '北'];
@@ -1217,7 +1768,35 @@ const ui = (function () {
       });
     }
     document.body.appendChild(overlay);
+    if (opts.rotateDeg) applySheetRotation(overlay, opts.rotateDeg);
     return overlay;
+  }
+
+  // v2.1(6.3.6 MUST): ルートコンテナ1つを回転。180°は寸法そのまま、±90°は寸法入替+画面中央固定
+  function applySheetRotation(overlay, deg) {
+    const sheetEl = overlay.querySelector('.sheet');
+    if (!sheetEl) return;
+    if (deg === 180) {
+      sheetEl.style.transform = 'rotate(180deg)';
+    } else if (deg === 90 || deg === -90) {
+      sheetEl.style.position = 'fixed';
+      sheetEl.style.left = '50%';
+      sheetEl.style.top = '50%';
+      sheetEl.style.bottom = 'auto';
+      sheetEl.style.right = 'auto';
+      sheetEl.style.width = '100vh';
+      sheetEl.style.height = '100vw';
+      sheetEl.style.maxHeight = '100vw';
+      sheetEl.style.overflowY = 'auto';
+      sheetEl.style.transform = 'translate(-50%, -50%) rotate(' + deg + 'deg)';
+    }
+  }
+
+  // 席インデックス→対局画面での回転角(下0/上180/左+90/右-90)。設定OFF時やパネル位置不明時は0。
+  function rotationDegForSeat(game, seatIdx) {
+    if (!appSettings().rotateSheets) return 0;
+    const pos = panelPositions(game)[seatIdx];
+    return { bottom: 0, top: 180, left: 90, right: -90 }[pos] || 0;
   }
 
   function confirmDialog(title, msg, okLabel, onOk, danger) {
@@ -1306,10 +1885,20 @@ const ui = (function () {
       }
       $app.innerHTML = screenResult(g, false, true);
       bindResultScreen(g, false);
+    } else if (r.startsWith('#/sessions/')) {
+      showTabbar(true);
+      const sid = r.split('/')[2];
+      $app.innerHTML = screenSessionDetail(sid);
+      bindSessionDetailScreen(sid);
     } else if (r === '#/records') {
       showTabbar(true);
       $app.innerHTML = screenRecords();
       bindRecordsScreen();
+    } else if (r.startsWith('#/players-stats/')) {
+      showTabbar(true);
+      const pid = decodeURIComponent(r.split('/')[2] || '');
+      $app.innerHTML = screenPlayerDetail(pid);
+      bindPlayerDetailScreen(pid);
     } else if (r === '#/players-stats') {
       showTabbar(true);
       $app.innerHTML = screenPlayersStats();
@@ -1338,6 +1927,375 @@ const ui = (function () {
   // =================================================================
   // SETUP SCREEN (#/)
   // =================================================================
+  // =================================================================
+  // v2.1: F-35 会(セッション。6.15)
+  // =================================================================
+  function sessionBannerHtml() {
+    const active = storage.getActiveSession();
+    if (!active) {
+      return '<div class="card" style="margin-top:10px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;">' +
+        '<span style="font-size:13.5px;color:var(--sub);">会に参加していません</span>' +
+        '<button class="btn btn-ghost" style="padding:8px 14px;" data-act="session-start">会を開始</button></div>';
+    }
+    const count = storage.getGames().filter((g) => g.sessionId === active.id && !g.deleted).length;
+    return '<div class="card" style="margin-top:10px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;">' +
+      '<span style="font-size:13.5px;">開催中: <b>' + active.name + '</b>(対局' + count + '件)</span>' +
+      '<button class="btn btn-ghost" style="padding:8px 14px;" data-act="session-end">終了</button></div>';
+  }
+  function bindSessionBanner() {
+    const startBtn = $app.querySelector('[data-act="session-start"]');
+    if (startBtn) startBtn.onclick = () => openSessionStartSheet();
+    const endBtn = $app.querySelector('[data-act="session-end"]');
+    if (endBtn) endBtn.onclick = () => {
+      const active = storage.getActiveSession();
+      if (!active) return;
+      confirmDialog('会を終了', '「' + active.name + '」を終了しますか?終了後に保存する対局は紐付きません。', '終了する', () => {
+        active.endedAt = Date.now();
+        active.updatedAt = Date.now();
+        const list = storage.getSessions();
+        const idx = list.findIndex((s) => s.id === active.id);
+        if (idx >= 0) list[idx] = active;
+        storage.setSessions(list);
+        sync.queueSessionSave(active);
+        sync.flushQueue();
+        toast('会を終了しました');
+        render();
+      }, false);
+    };
+  }
+  function openSessionStartSheet() {
+    const d = new Date();
+    const defaultName = (d.getMonth() + 1) + '/' + d.getDate() + ' の会';
+    const overlay = openSheet(
+      '<div style="font-weight:800;font-size:16px;margin-bottom:10px;">会を開始</div>' +
+      '<input class="txt" id="session-name" value="' + defaultName + '" placeholder="会名">' +
+      '<div class="row" style="margin-top:14px;"><button class="btn btn-ghost" data-close>キャンセル</button><button class="btn btn-primary" data-ok>開始</button></div>',
+      { center: true }
+    );
+    overlay.querySelector('[data-close]').onclick = () => closeOverlay(overlay);
+    overlay.querySelector('[data-ok]').onclick = () => {
+      const name = overlay.querySelector('#session-name').value.trim() || defaultName;
+      const session = { id: engine.uid(), name, startedAt: Date.now(), updatedAt: Date.now() };
+      const list = storage.getSessions();
+      list.push(session);
+      storage.setSessions(list);
+      sync.queueSessionSave(session);
+      sync.flushQueue();
+      closeOverlay(overlay);
+      toast('会「' + name + '」を開始しました');
+      render();
+    };
+  }
+
+  function fmtSessionPeriod(session) {
+    const s = new Date(session.startedAt);
+    const e = session.endedAt ? new Date(session.endedAt) : null;
+    const p2 = (x) => String(x).padStart(2, '0');
+    const sDate = (s.getMonth() + 1) + '/' + s.getDate();
+    const sTime = p2(s.getHours()) + ':' + p2(s.getMinutes());
+    if (!e) return sDate + ' ' + sTime + ' 〜 開催中';
+    const eDate = (e.getMonth() + 1) + '/' + e.getDate();
+    const eTime = p2(e.getHours()) + ':' + p2(e.getMinutes());
+    const sameDay = s.toDateString() === e.toDateString();
+    return sameDay ? sDate + ' ' + sTime + ' 〜 ' + eTime : sDate + ' ' + sTime + ' 〜 ' + eDate + ' ' + eTime;
+  }
+  function sessionsListHtml() {
+    const sessions = [...storage.getSessions()].filter((s) => !s.deleted).sort((a, b) => b.startedAt - a.startedAt);
+    if (!sessions.length) return '<div class="empty-state"><div class="big">📅</div>まだ会がありません</div>';
+    const games = storage.getGames().filter((g) => g.status === 'finished' && !g.deleted);
+    const cards = sessions
+      .map((s) => {
+        const sGames = games.filter((g) => g.sessionId === s.id);
+        const playerIds = new Set();
+        sGames.forEach((g) => g.seats.forEach((seat) => playerIds.add(seat.playerId)));
+        const names = Array.from(playerIds).map((id) => playerName(id)).join('・') || '参加者なし';
+        return (
+          '<div class="game-list-card tap" data-session-card="' + s.id + '">' +
+          '<div class="game-list-head"><span>' + s.name + '</span><span>' + (s.endedAt ? '' : '<b style="color:var(--accent);">開催中</b>') + '</span></div>' +
+          '<div class="mini-rank"><span>' + fmtSessionPeriod(s) + '</span><span>' + sGames.length + '局</span></div>' +
+          '<div class="hint" style="padding:2px 0 0;text-align:left;">' + names + '</div>' +
+          '</div>'
+        );
+      })
+      .join('');
+    return '<div style="padding:0 0 10px;">' + cards + '</div><div style="height:20px;"></div>';
+  }
+
+  // 会集計: 参加プレイヤーごとに 対局数/合計pt/収支円合計/会の最終収支円(場代込み)
+  function computeSessionAggregate(session) {
+    const games = storage.getGames().filter((g) => g.sessionId === session.id && g.status === 'finished' && !g.deleted);
+    const agg = {}; // playerId -> {count, totalPt, totalYen}
+    let individualVenueYen = 0;
+    games.forEach((g) => {
+      (g.result || []).forEach((r) => {
+        if (!agg[r.playerId]) agg[r.playerId] = { playerId: r.playerId, count: 0, totalPt: 0, totalYen: 0 };
+        agg[r.playerId].count++;
+        agg[r.playerId].totalPt += r.totalPt;
+        agg[r.playerId].totalYen += r.yen || 0;
+      });
+      if (g.venue) individualVenueYen += g.venue.totalYen || 0;
+    });
+    const sv = session.venue;
+    if (sv && sv.settlements) {
+      sv.settlements.forEach((s) => {
+        if (agg[s.playerId]) agg[s.playerId].sessionBurdenYen = s.burdenYen;
+      });
+    }
+    Object.values(agg).forEach((a) => {
+      a.finalYen = a.totalYen - (a.sessionBurdenYen || 0);
+    });
+    return { games, byPlayer: Object.values(agg).sort((a, b) => b.totalPt - a.totalPt), individualVenueYen };
+  }
+
+  function screenSessionDetail(sessionId) {
+    const session = storage.getSessions().find((s) => s.id === sessionId);
+    if (!session) return topbar('会', '<span class="side"><button class="iconbtn" data-act="back">‹</button></span>') + '<div class="empty-state"><div class="big">🙈</div>会が見つかりません</div>';
+    const agg = computeSessionAggregate(session);
+    const rows = agg.byPlayer
+      .map(
+        (a) =>
+          '<div class="venue-row"><div><div class="nm">' + playerName(a.playerId) + '</div><div class="sub">' + a.count + '局 ・ 合計' + fmtPt(a.totalPt) + '</div></div>' +
+          '<div class="final ' + (a.finalYen >= 0 ? 'pos' : 'neg') + '">' + (a.finalYen >= 0 ? '+' : '') + a.finalYen.toLocaleString() + '円</div></div>'
+      )
+      .join('');
+    const gameRows = agg.games
+      .slice()
+      .sort((a, b) => b.startedAt - a.startedAt)
+      .map((g) => {
+        const ranked = [...(g.result || [])].sort((x, y) => x.rank - y.rank);
+        const top = ranked[0];
+        return '<div class="list-row tap" data-open-game="' + g.id + '"><div class="label">' + fmtDateTime(g.startedAt) + ' ・ MF' + g.serialNo + '</div><div class="value">' + (top ? playerName(top.playerId) + ' ' + fmtPt(top.totalPt) : '') + '<span class="chev">›</span></div></div>';
+      })
+      .join('');
+    const noticeHtml = agg.individualVenueYen
+      ? '<div class="hint" style="color:var(--red);text-align:center;">対局単位の場代 合計¥' + agg.individualVenueYen.toLocaleString() + ' が別途精算済みです(この会精算には含まれません)</div>'
+      : '';
+    return (
+      topbar(session.name, '<span class="side"><button class="iconbtn" data-act="back">‹</button></span>', '<span class="side"><button class="iconbtn" data-act="session-edit">✎</button></span>') +
+      '<div class="hint" style="text-align:center;padding-top:8px;">' + fmtSessionPeriod(session) + (session.memo ? ' ・ ' + session.memo : '') + '</div>' +
+      '<div class="section-title">会集計</div>' +
+      noticeHtml +
+      '<div class="card">' + (rows || '<div class="list-row"><div class="label" style="color:var(--sub);">対局がありません</div></div>') + '</div>' +
+      '<div style="padding:14px 14px 4px;"><button class="btn btn-ghost btn-block" style="border:1px solid var(--line);" data-act="session-venue">会の場代精算' + (session.venue ? '(再編集)' : '') + '</button></div>' +
+      '<div class="section-title">対局(' + agg.games.length + '件)</div>' +
+      '<div class="card">' + (gameRows || '<div class="list-row"><div class="label" style="color:var(--sub);">対局がありません</div></div>') + '</div>' +
+      '<div style="padding:16px 14px;display:flex;gap:10px;">' +
+      (session.endedAt ? '' : '<button class="btn btn-ghost" style="flex:1;" data-act="session-end2">会を終了</button>') +
+      '<button class="btn btn-danger-text" data-act="session-delete">会を削除</button>' +
+      '</div>' +
+      '<div style="height:20px;"></div>'
+    );
+  }
+
+  function bindSessionDetailScreen(sessionId) {
+    $app.querySelector('[data-act="back"]').onclick = () => navigate('#/records');
+    $app.querySelectorAll('[data-open-game]').forEach((b) => b.addEventListener('click', () => navigate('#/records/' + b.dataset.openGame)));
+    const editBtn = $app.querySelector('[data-act="session-edit"]');
+    if (editBtn) editBtn.onclick = () => openSessionEditSheet(sessionId);
+    const venueBtn = $app.querySelector('[data-act="session-venue"]');
+    if (venueBtn) venueBtn.onclick = () => openSessionVenueModal(sessionId);
+    const endBtn = $app.querySelector('[data-act="session-end2"]');
+    if (endBtn) endBtn.onclick = () => {
+      const session = storage.getSessions().find((s) => s.id === sessionId);
+      confirmDialog('会を終了', '「' + session.name + '」を終了しますか?', '終了する', () => {
+        session.endedAt = Date.now();
+        session.updatedAt = Date.now();
+        saveSessionList(session);
+        toast('会を終了しました');
+        render();
+      }, false);
+    };
+    const delBtn = $app.querySelector('[data-act="session-delete"]');
+    if (delBtn) delBtn.onclick = () => {
+      confirmDialog('会を削除', 'この会を削除します(対局データは削除されません)。よろしいですか?', '削除する', () => {
+        const session = storage.getSessions().find((s) => s.id === sessionId);
+        session.deleted = true;
+        session.updatedAt = Date.now();
+        saveSessionList(session);
+        toast('会を削除しました');
+        navigate('#/records');
+      }, true);
+    };
+  }
+  function saveSessionList(session) {
+    const list = storage.getSessions();
+    const idx = list.findIndex((s) => s.id === session.id);
+    if (idx >= 0) list[idx] = session;
+    else list.push(session);
+    storage.setSessions(list);
+    sync.queueSessionSave(session);
+    sync.flushQueue();
+  }
+  function openSessionEditSheet(sessionId) {
+    const session = storage.getSessions().find((s) => s.id === sessionId);
+    const overlay = openSheet(
+      '<div class="sheet-header"><button data-close class="iconbtn">×</button><h2>会を編集</h2><span></span></div>' +
+      '<label class="flabel">会名</label>' +
+      '<div style="padding:0 14px;"><input class="txt" id="se-name" value="' + session.name + '"></div>' +
+      '<label class="flabel">メモ</label>' +
+      '<div style="padding:0 14px;"><textarea class="memo" id="se-memo">' + (session.memo || '') + '</textarea></div>' +
+      '<div style="padding:16px 14px;"><button class="btn btn-primary btn-block" data-save>保存</button></div>'
+    );
+    overlay.querySelector('[data-close]').onclick = () => closeOverlay(overlay);
+    overlay.querySelector('[data-save]').onclick = () => {
+      session.name = overlay.querySelector('#se-name').value.trim() || session.name;
+      session.memo = overlay.querySelector('#se-memo').value;
+      session.updatedAt = Date.now();
+      saveSessionList(session);
+      closeOverlay(overlay);
+      render();
+    };
+  }
+
+  // ---- v2.1(6.15.4): 会単位の場代精算。F-34と同一計算式をplayerIdベースで適用 ----
+  function openSessionVenueModal(sessionId) {
+    const session = storage.getSessions().find((s) => s.id === sessionId);
+    const agg = computeSessionAggregate(session);
+    const ranked = [...agg.byPlayer].sort((a, b) => b.totalPt - a.totalPt);
+    const playerIds = ranked.map((a) => a.playerId); // index=擬似seat番号として domain.venueSettlement を再利用
+    const betYenBySeat = {};
+    ranked.forEach((a, i) => (betYenBySeat[i] = a.totalYen));
+    const n = playerIds.length;
+    if (n === 0) {
+      toast('会に対局がありません');
+      return;
+    }
+    const v = session.venue;
+    const state = {
+      totalYen: v ? v.totalYen : 0,
+      method: v ? v.method : 'equal',
+      weights: v && v.weights ? v.weights.slice() : defaultVenueWeights(n),
+      payerIdx: v && v.payerPlayerId ? playerIds.indexOf(v.payerPlayerId) : -1,
+    };
+    function computeHtml() {
+      const weightsOk = state.method !== 'weighted' || state.weights.reduce((a, b) => a + (b || 0), 0) === 100;
+      let settlements = [];
+      if (weightsOk && state.totalYen >= 0) {
+        settlements = domain.venueSettlement(state.totalYen, state.method, state.weights, playerIds.map((_, i) => i), betYenBySeat);
+      }
+      const rows = playerIds
+        .map((pid, i) => {
+          const s = settlements[i] || { betYen: betYenBySeat[i] || 0, burdenYen: 0, finalYen: betYenBySeat[i] || 0 };
+          return (
+            '<div class="venue-row"><div><div class="nm">' + (i + 1) + '位 ' + playerName(pid) + '</div>' +
+            '<div class="sub">対局収支合計 ' + (s.betYen >= 0 ? '+' : '') + s.betYen.toLocaleString() + '円 ・ 会場代負担 -' + s.burdenYen.toLocaleString() + '円</div></div>' +
+            '<div class="final ' + (s.finalYen >= 0 ? 'pos' : 'neg') + '">' + (s.finalYen >= 0 ? '+' : '') + s.finalYen.toLocaleString() + '円</div></div>'
+          );
+        })
+        .join('');
+      const sumFinal = settlements.reduce((a, s) => a + s.finalYen, 0);
+      const checkHtml = !weightsOk
+        ? '<div class="venue-check-row err">傾斜%の合計が100ではありません</div>'
+        : '<div class="venue-check-row ok">収支合計 ' + (sumFinal >= 0 ? '+' : '') + sumFinal.toLocaleString() + '円 ✓</div>';
+      let transferHtml = '';
+      if (weightsOk && state.payerIdx >= 0) {
+        const transfers = domain.venueTransfers(settlements, state.payerIdx);
+        transferHtml = transfers.length
+          ? '<div class="section-title">送金リスト</div><div class="card">' + transfers.map((t) => '<div class="venue-transfer"><span>' + playerName(playerIds[t.from]) + ' → ' + playerName(playerIds[t.to]) + '</span><span>' + t.amount.toLocaleString() + '円</span></div>').join('') + '</div>'
+          : '';
+      }
+      return { rowsHtml: rows, checkHtml, transferHtml, weightsOk, settlements };
+    }
+    const overlay = openSheet(
+      '<div class="sheet-header"><button data-close class="iconbtn">×</button><h2>会の場代精算</h2><span></span></div>' +
+      (agg.individualVenueYen ? '<div class="hint" style="color:var(--red);text-align:center;">対局単位の場代 合計¥' + agg.individualVenueYen.toLocaleString() + ' は別途精算済みのため含まれません</div>' : '') +
+      '<label class="flabel">場代総額(円)</label>' +
+      '<div class="stepper-row"><button class="stepper-btn" data-step="-100">−</button><input class="txt" id="sv-total" type="number" step="100" value="' + state.totalYen + '"><button class="stepper-btn" data-step="100">+</button></div>' +
+      '<label class="flabel">負担方式</label>' +
+      '<div class="seg" style="margin:0 14px 6px;width:auto;" id="sv-method-seg">' +
+      ['equal', 'weighted', 'topExempt'].map((m) => '<button class="' + (state.method === m ? 'active' : '') + '" data-method="' + m + '">' + (m === 'equal' ? '均等割り' : m === 'weighted' ? '傾斜' : 'トップ免除') + '</button>').join('') +
+      '</div>' +
+      '<div id="sv-weights-wrap"></div>' +
+      '<label class="flabel">立替者</label>' +
+      '<div style="padding:0 14px;"><select class="txt" id="sv-payer"><option value="-1">なし(各自払い)</option>' + playerIds.map((pid, i) => '<option value="' + i + '"' + (state.payerIdx === i ? ' selected' : '') + '>' + playerName(pid) + '</option>').join('') + '</select></div>' +
+      '<div id="sv-check" style="margin-top:8px;"></div>' +
+      '<div class="card" id="sv-rows" style="margin-top:6px;"></div>' +
+      '<div id="sv-transfers"></div>' +
+      '<div style="padding:16px 14px 10px;display:flex;gap:10px;">' +
+      (session.venue ? '<button class="btn btn-danger-text" data-delete>削除</button>' : '') +
+      '<button class="btn btn-primary btn-block" data-save>保存</button>' +
+      '</div>',
+      { full: true }
+    );
+    function weightsInputHtml() {
+      if (state.method !== 'weighted') return '';
+      return '<div class="venue-weights">' + playerIds.map((pid, i) => '<div class="wcell"><label>' + (i + 1) + '位%</label><input type="number" data-w="' + i + '" value="' + (state.weights[i] || 0) + '"></div>').join('') + '</div>';
+    }
+    function bindWeightInputs() {
+      overlay.querySelectorAll('[data-w]').forEach((inp) =>
+        inp.addEventListener('input', () => {
+          state.weights[parseInt(inp.dataset.w, 10)] = parseFloat(inp.value) || 0;
+          refresh();
+        })
+      );
+    }
+    function refresh() {
+      const c = computeHtml();
+      overlay.querySelector('#sv-rows').innerHTML = c.rowsHtml;
+      overlay.querySelector('#sv-check').innerHTML = c.checkHtml;
+      overlay.querySelector('#sv-transfers').innerHTML = c.transferHtml;
+      overlay.querySelector('[data-save]').disabled = !c.weightsOk;
+      overlay.querySelector('[data-save]').style.opacity = c.weightsOk ? '1' : '.4';
+    }
+    overlay.querySelector('#sv-weights-wrap').innerHTML = weightsInputHtml();
+    bindWeightInputs();
+    overlay.querySelector('[data-close]').onclick = () => closeOverlay(overlay);
+    const totalInput = overlay.querySelector('#sv-total');
+    totalInput.oninput = () => {
+      state.totalYen = Math.max(0, parseInt(totalInput.value, 10) || 0);
+      refresh();
+    };
+    overlay.querySelectorAll('[data-step]').forEach((b) =>
+      b.addEventListener('click', () => {
+        state.totalYen = Math.max(0, state.totalYen + parseInt(b.dataset.step, 10));
+        totalInput.value = state.totalYen;
+        refresh();
+      })
+    );
+    overlay.querySelectorAll('[data-method]').forEach((b) =>
+      b.addEventListener('click', () => {
+        state.method = b.dataset.method;
+        overlay.querySelectorAll('[data-method]').forEach((x) => x.classList.toggle('active', x === b));
+        overlay.querySelector('#sv-weights-wrap').innerHTML = weightsInputHtml();
+        bindWeightInputs();
+        refresh();
+      })
+    );
+    overlay.querySelector('#sv-payer').onchange = (e) => {
+      state.payerIdx = parseInt(e.target.value, 10);
+      refresh();
+    };
+    overlay.querySelector('[data-save]').onclick = () => {
+      const c = computeHtml();
+      if (!c.weightsOk) return;
+      session.venue = {
+        totalYen: state.totalYen,
+        method: state.method,
+        weights: state.method === 'weighted' ? state.weights.slice() : undefined,
+        payerPlayerId: state.payerIdx >= 0 ? playerIds[state.payerIdx] : undefined,
+        settlements: c.settlements.map((s, i) => ({ playerId: playerIds[i], betYen: s.betYen, burdenYen: s.burdenYen, finalYen: s.finalYen })),
+        updatedAt: Date.now(),
+      };
+      session.updatedAt = Date.now();
+      saveSessionList(session);
+      closeOverlay(overlay);
+      toast('会の場代精算を保存しました');
+      render();
+    };
+    const deleteBtn = overlay.querySelector('[data-delete]');
+    if (deleteBtn) {
+      deleteBtn.onclick = () => {
+        delete session.venue;
+        session.updatedAt = Date.now();
+        saveSessionList(session);
+        closeOverlay(overlay);
+        toast('会の場代精算を削除しました');
+        render();
+      };
+    }
+    refresh();
+  }
+
   function screenSetup() {
     const resumeGame = storage.getActiveGame();
     const mode = S.setup.mode;
@@ -1389,6 +2347,7 @@ const ui = (function () {
       '</div>' +
       '<div class="card" style="margin-top:8px;">' + rows + '</div>' +
       emptySeatChipHtml +
+      sessionBannerHtml() +
       '<div class="hint" style="padding:12px 20px 0;">一番上のプレイヤーが対局画面の下側(自分位置)に配置されます</div>' +
       (resumeGame
         ? '<div class="section-title">中断中の対局</div><div class="card"><div class="list-row tap" data-act="resume-game"><div class="label">' +
@@ -1404,6 +2363,7 @@ const ui = (function () {
   }
 
   function bindSetupScreen() {
+    bindSessionBanner();
     $app.querySelectorAll('[data-act="set-mode"]').forEach((b) =>
       b.addEventListener('click', () => {
         S.setup.mode = b.dataset.mode;
@@ -1478,6 +2438,7 @@ const ui = (function () {
     const n = seatCountOf(mode);
     const rules = storage.getRules(mode === 'yonin_sanma' ? 'yonin_sanma' : mode);
     const seats = S.setup.seatPlayerIds.map((pid, i) => ({ playerId: pid, wind: ['E', 'S', 'W', 'N'][i], name: playerName(pid) }));
+    const activeSession = storage.getActiveSession();
     const game = {
       id: engine.uid(),
       serialNo: storage.nextSerial(),
@@ -1485,6 +2446,7 @@ const ui = (function () {
       rules,
       seats,
       emptySeatSide: mode === 'sanma' ? S.setup.emptySeatSide || 'top' : undefined,
+      sessionId: activeSession ? activeSession.id : undefined,
       startedAt: Date.now(),
       events: [],
       status: 'active',
@@ -1669,6 +2631,7 @@ const ui = (function () {
       return;
     }
     const rules = storage.getRules(mode);
+    const yakitoriOn = new Set();
     const rows = S.setup.seatPlayerIds
       .map(
         (pid, i) =>
@@ -1676,14 +2639,42 @@ const ui = (function () {
           '<input class="txt" style="width:120px;text-align:right;" type="number" data-final-seat="' + i + '" value="' + rules.startPoints + '"></div>'
       )
       .join('');
+    const yakitoriRows = rules.yakitori.enabled
+      ? '<div class="section-title">焼き鳥(未和了)</div><div class="card">' +
+        S.setup.seatPlayerIds
+          .map(
+            (pid, i) =>
+              '<div class="list-row tap" data-yaki-row="' + i + '"><div class="label">' + playerName(pid) + '</div>' +
+              '<span class="sel-check' + '" data-yaki-check="' + i + '" style="position:static;display:inline-flex;align-items:center;justify-content:center;">' + '</span></div>'
+          )
+          .join('') +
+        '</div><div class="hint">和了できなかったプレイヤーにチェックを付けてください(イベント履歴が無く自動判定できないため)</div>'
+      : '';
     const overlay = openSheet(
       '<div class="sheet-header"><button data-close class="iconbtn">×</button><h2>結果のみ記録</h2><span></span></div>' +
       '<div class="sheet-body"><div class="hint" style="text-align:left;padding:10px 14px;">各プレイヤーの最終持ち点を入力してください</div>' +
       '<div class="card">' + rows + '</div>' +
+      yakitoriRows +
       '<div style="padding:14px;"><button class="btn btn-primary btn-block" data-calc>精算する</button></div></div>',
       { full: true }
     );
     overlay.querySelector('[data-close]').onclick = () => closeOverlay(overlay);
+    function refreshYakiChecks() {
+      overlay.querySelectorAll('[data-yaki-check]').forEach((el) => {
+        const i = +el.dataset.yakiCheck;
+        el.classList.toggle('checked', yakitoriOn.has(i));
+        el.textContent = yakitoriOn.has(i) ? '✓' : '';
+      });
+    }
+    overlay.querySelectorAll('[data-yaki-row]').forEach((row) =>
+      row.addEventListener('click', () => {
+        const i = +row.dataset.yakiRow;
+        if (yakitoriOn.has(i)) yakitoriOn.delete(i);
+        else yakitoriOn.add(i);
+        refreshYakiChecks();
+      })
+    );
+    refreshYakiChecks();
     overlay.querySelector('[data-calc]').onclick = () => {
       const finalPoints = S.setup.seatPlayerIds.map((pid, i) => ({
         seat: i,
@@ -1696,6 +2687,7 @@ const ui = (function () {
         rules,
         seats: S.setup.seatPlayerIds.map((pid, i) => ({ playerId: pid, wind: ['E', 'S', 'W', 'N'][i], name: playerName(pid) })),
         emptySeatSide: mode === 'sanma' ? S.setup.emptySeatSide || 'top' : undefined,
+        sessionId: storage.getActiveSession() ? storage.getActiveSession().id : undefined,
         startedAt: Date.now(),
         endedAt: Date.now(),
         durationMin: 0,
@@ -1703,7 +2695,8 @@ const ui = (function () {
         status: 'finished',
         updatedAt: Date.now(),
       };
-      game.result = buildResult(game, finalPoints);
+      const extras = rules.yakitori.enabled ? { yakitoriSeats: Array.from(yakitoriOn) } : {};
+      game.result = buildResult(game, finalPoints, extras);
       closeOverlay(overlay);
       S.pendingResult = game;
       navigate('#/result');
@@ -1718,10 +2711,52 @@ const ui = (function () {
     });
   }
 
-  function buildResult(game, finalPoints) {
-    const res = domain.settleGame(finalPoints, game.seats.length, game.rules);
+  // v2.1(8.5.1/8.5.2): イベント列から焼き鳥席・箱下の「飛ばした者」・チップ増減を導出する
+  function deriveExtrasFromEvents(game, st) {
+    const yakitoriSeats = game.seats.map((_, i) => i).filter((i) => !st.everWon[i]);
+    const bustCausedByMap = {};
+    let s = engine.initialState(game);
+    (game.events || []).forEach((ev) => {
+      const before = s.points.slice();
+      s = engine.applyEvent(s, game, ev);
+      s.points.forEach((p, seat) => {
+        const wasNeg = before[seat] < 0;
+        const isNeg = p < 0;
+        if (!wasNeg && isNeg) {
+          if (ev.type === 'WIN') {
+            const winnerSeat = ev.winners.length > 0 ? ev.winners[0].seat : null; // 頭ハネ=先頭の和了者
+            bustCausedByMap[seat] = { seat, bySeat: winnerSeat != null && winnerSeat !== seat ? winnerSeat : undefined };
+          } else {
+            bustCausedByMap[seat] = { seat }; // 和了以外(罰符・チョンボ・手動調整等)→飛ばした者なし
+          }
+        } else if (wasNeg && !isNeg) {
+          delete bustCausedByMap[seat]; // 終了時点0以上に回復していれば対象外
+        }
+      });
+    });
+    const chipCounts = {};
+    (game.events || []).forEach((ev) => {
+      if (ev.type === 'CHIP') chipCounts[ev.seat] = (chipCounts[ev.seat] || 0) + ev.delta;
+    });
+    return { yakitoriSeats, bustCausedBy: Object.values(bustCausedByMap), chipCounts };
+  }
+
+  function buildResult(game, finalPoints, extras) {
+    let ex = extras;
+    if (!ex) {
+      if (game.events && game.events.length > 0) {
+        ex = deriveExtrasFromEvents(game, engine.deriveState(game));
+      } else {
+        ex = {}; // 結果のみ記録でextras未指定=焼き鳥判定なし
+      }
+    }
+    const res = domain.settleGame(finalPoints, game.seats.length, game.rules, ex);
+    const yakiSet = new Set(ex.yakitoriSeats || []);
     return res.map((r) => {
       const pid = game.seats[r.seat].playerId;
+      const betYen = game.rules.bet.enabled ? Math.round(r.totalPt * game.rules.bet.ratePerPt) : 0;
+      const chipYen = r.chipYen || 0;
+      const hasYen = game.rules.bet.enabled || (game.rules.chip.enabled && chipYen !== 0);
       return {
         seat: r.seat,
         playerId: pid,
@@ -1730,10 +2765,10 @@ const ui = (function () {
         rawPt: r.rawPt,
         umaPt: r.umaPt,
         okaPt: r.okaPt,
-        bonusPt: 0,
+        bonusPt: r.bonusPt || 0,
         totalPt: r.totalPt,
-        yen: game.rules.bet.enabled ? Math.round(r.totalPt * game.rules.bet.ratePerPt) : undefined,
-        yakitori: false,
+        yen: hasYen ? betYen + chipYen : undefined,
+        yakitori: yakiSet.has(r.seat),
       };
     });
   }
@@ -1814,33 +2849,58 @@ const ui = (function () {
     );
   }
 
-  // ---- 長押し検出(±ボタン: タップ=点差表示 / 500ms長押し=点数調整) ----
+  // ---- v2.1(6.2.4 MUST): タップ/長押し判定。移動距離10px基準・setPointerCapture・touch-action:none ----
   function bindLongPress(el, onTap, onLongPress, ms) {
     let timer = null;
     let longFired = false;
-    let moved = false;
-    const start = (e) => {
-      longFired = false;
-      moved = false;
-      timer = setTimeout(() => {
-        longFired = true;
-        onLongPress(e);
-      }, ms || 500);
-    };
-    const cancel = () => {
+    let cancelled = false;
+    let startX = 0;
+    let startY = 0;
+    const THRESHOLD = 10;
+    el.style.touchAction = 'none';
+    el.style.userSelect = 'none';
+    const clearTimer = () => {
       if (timer) clearTimeout(timer);
       timer = null;
     };
+    const start = (e) => {
+      longFired = false;
+      cancelled = false;
+      startX = e.clientX;
+      startY = e.clientY;
+      try {
+        el.setPointerCapture(e.pointerId);
+      } catch (err) {
+        /* noop: 一部環境でsetPointerCapture非対応 */
+      }
+      timer = setTimeout(() => {
+        if (!cancelled) {
+          longFired = true;
+          onLongPress(e);
+        }
+      }, ms || 500);
+    };
+    const move = (e) => {
+      if (cancelled) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      if (Math.sqrt(dx * dx + dy * dy) > THRESHOLD) {
+        cancelled = true;
+        clearTimer();
+      }
+    };
     const end = (e) => {
-      cancel();
-      if (!longFired && !moved) onTap(e);
+      clearTimer();
+      if (!longFired && !cancelled) onTap(e);
+    };
+    const onCancel = () => {
+      clearTimer();
+      cancelled = true;
     };
     el.addEventListener('pointerdown', start);
     el.addEventListener('pointerup', end);
-    el.addEventListener('pointerleave', cancel);
-    el.addEventListener('pointermove', () => {
-      moved = true;
-    });
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointercancel', onCancel);
     el.addEventListener('contextmenu', (e) => e.preventDefault());
   }
 
@@ -1921,6 +2981,45 @@ const ui = (function () {
     commitStampedEvent(stampEvent(ev));
   }
 
+  // ---- v2.1: 端末設定(音声読み上げ mj.app.voiceEnabled / 回転 mj.app.rotateSheets。同期対象外) ----
+  function appSettings() {
+    const app = storage.getApp();
+    return {
+      voiceEnabled: app.voiceEnabled !== false, // デフォルトON
+      rotateSheets: app.rotateSheets !== false, // デフォルトON
+    };
+  }
+  function setAppSetting(key, value) {
+    const app = storage.getApp();
+    app[key] = value;
+    storage.setApp(app);
+  }
+  function speakIfGameScreen(text) {
+    if (!appSettings().voiceEnabled) return;
+    if (currentRoute() !== '#/game') return; // 6.16: 対局画面での操作起因のみ
+    voice.speak(text);
+  }
+
+  // ---- v2.1(9章a): イベント確定後の共通処理。箱下終了(即遷移)/最終局到達(確認)/継続 を判定 ----
+  function afterEventCommitted() {
+    const st = engine.deriveState(S.game);
+    if (!st.finished) {
+      render();
+      return;
+    }
+    const bustNow = S.game.rules.bustEnd && st.points.some((p) => p < 0);
+    if (bustNow) {
+      render();
+      offerBustEnd(st);
+    } else {
+      offerGameEndByLastKyoku();
+    }
+  }
+  function offerBustEnd(st) {
+    const names = S.game.seats.filter((_, i) => st.points[i] < 0).map((s) => playerName(s.playerId)).join('・');
+    confirmDialog('箱下終了', names + ' の持ち点がマイナスになったため、対局を終了します。', 'OK', () => endGame(), true);
+  }
+
   function toggleRiichi(seat) {
     const st = engine.deriveState(S.game);
     if (st.points[seat] < 1000 && !S.game.rules.riichiUnderZero) {
@@ -1930,11 +3029,14 @@ const ui = (function () {
     if (st.riichi[seat]) {
       appendEvent({ type: 'RIICHI_CANCEL', seat });
       toast(playerName(S.game.seats[seat].playerId) + ' リーチ取消');
+      // リーチ取消は無音(6.16)
+      afterEventCommitted();
     } else {
       appendEvent({ type: 'RIICHI', seat });
       toast(playerName(S.game.seats[seat].playerId) + ' リーチ宣言');
+      speakIfGameScreen('リーチ');
+      afterEventCommitted();
     }
-    render();
   }
 
   // ---- F-30: サイコロ演出+割れ目決定 ----
@@ -1982,7 +3084,7 @@ const ui = (function () {
   // =================================================================
   // 6.3.5 清算確認画面: 和了・複数和了・流局・チョンボは、確定前に必ずこの画面を通す
   // =================================================================
-  function openSettlementConfirm(ev, opts) {
+  function openSettlementConfirm(ev, opts, rotateDeg) {
     // opts: { onBack: fn, onConfirm: fn }
     const preState = engine.deriveState(S.game);
     const postGame = Object.assign({}, S.game, { events: S.game.events.concat([ev]) });
@@ -2014,7 +3116,7 @@ const ui = (function () {
       infoHtml +
       '<div style="padding:18px 14px 4px;"><button class="btn btn-primary btn-block" data-confirm>確定</button></div>' +
       '</div>',
-      { full: true }
+      { full: true, rotateDeg: rotateDeg || 0 }
     );
     overlay.querySelector('[data-back]').onclick = () => {
       closeOverlay(overlay);
@@ -2193,7 +3295,7 @@ const ui = (function () {
       appendEvent({ type: 'ADJUST', seat, delta, memo: memo || undefined });
       closeOverlay(overlay);
       toast(playerName(S.game.seats[seat].playerId) + ' ' + (delta > 0 ? '+' : '') + delta);
-      render();
+      afterEventCommitted();
     };
   }
 
@@ -2207,7 +3309,7 @@ const ui = (function () {
       '<button class="ron" data-m="ron">ロン</button>' +
       '<button class="cancel" data-close2>キャンセル</button>' +
       '</div>',
-      { center: false }
+      { center: false, rotateDeg: rotationDegForSeat(S.game, seat) }
     );
     overlay.querySelector('[data-close]').onclick = () => closeOverlay(overlay);
     overlay.querySelector('[data-close2]').onclick = () => closeOverlay(overlay);
@@ -2225,14 +3327,14 @@ const ui = (function () {
 
   function startTsumoScoring(seat) {
     openWinScoreSheet(seat, 'tsumo', null, (winner) => {
-      commitWin([winner], 'tsumo', null, () => startTsumoScoring(seat));
-    });
+      commitWin([winner], 'tsumo', null, () => startTsumoScoring(seat), seat);
+    }, seat);
   }
 
   function startRonScoring(seat, loserSeat) {
     openWinScoreSheet(seat, 'ron', loserSeat, (winner) => {
-      commitWin([winner], 'ron', loserSeat, () => startRonScoring(seat, loserSeat));
-    });
+      commitWin([winner], 'ron', loserSeat, () => startRonScoring(seat, loserSeat), seat);
+    }, seat);
   }
 
   function openLoserPicker(winnerSeat, onPick) {
@@ -2255,7 +3357,7 @@ const ui = (function () {
     );
   }
 
-  function openWinScoreSheet(seat, method, loserSeat, onCommit) {
+  function openWinScoreSheet(seat, method, loserSeat, onCommit, rotateSeat) {
     const isDealer = engine.deriveState(S.game).dealerIdx === seat;
     const role = isDealer ? 'dealer' : 'child';
     const hanList = [1, 2, 3, 4];
@@ -2302,7 +3404,7 @@ const ui = (function () {
       '<div class="section-title">点数</div>' +
       '<div class="card">' + hanRowsHtml + limitRowsHtml + directRowHtml + '</div>' +
       '</div>',
-      { full: true }
+      { full: true, rotateDeg: rotateSeat != null ? rotationDegForSeat(S.game, rotateSeat) : 0 }
     );
     overlay.querySelector('[data-close]').onclick = () => closeOverlay(overlay);
     overlay.querySelectorAll('[data-toggle]').forEach((h) =>
@@ -2348,21 +3450,31 @@ const ui = (function () {
     };
   }
 
-  function commitWin(winners, method, loserSeat, reopenFn) {
+  function commitWin(winners, method, loserSeat, reopenFn, rotateSeat) {
     const ev = { type: 'WIN', winners, method, loserSeat: loserSeat != null ? loserSeat : undefined };
     stampEvent(ev);
     openSettlementConfirm(ev, {
       onBack: reopenFn,
       onConfirm: () => {
+        const preState = engine.deriveState(S.game); // 確定前(親判定用)
         commitStampedEvent(ev);
-        const st = engine.deriveState(S.game);
         toast('和了を確定しました');
-        if (st.finished) {
-          offerGameEndByLastKyoku();
-        } else {
-          render();
-        }
+        speakWinEvent(ev, preState);
+        afterEventCommitted();
       },
+    }, rotateSeat != null ? rotationDegForSeat(S.game, rotateSeat) : 0);
+  }
+
+  // ---- v2.1(6.16): 和了確定の読み上げ ----
+  function speakWinEvent(ev, preState) {
+    if (!appSettings().voiceEnabled || currentRoute() !== '#/game') return;
+    ev.winners.forEach((w) => {
+      const isDealer = w.seat === preState.dealerIdx;
+      let payDetail = null;
+      if (w.directPoints == null) {
+        payDetail = domain.winPayments(w.han, w.fu, isDealer ? 'dealer' : 'child', ev.method);
+      }
+      voice.speakWin({ type: 'WIN', winners: [w], method: ev.method }, payDetail, isDealer);
     });
   }
 
@@ -2446,7 +3558,8 @@ const ui = (function () {
         onConfirm: () => {
           commitStampedEvent(ev);
           toast('特殊流局(本場+1)');
-          finishOrRender();
+          speakIfGameScreen('流局');
+          afterEventCommitted();
         },
       });
     };
@@ -2458,16 +3571,15 @@ const ui = (function () {
         onConfirm: () => {
           commitStampedEvent(ev);
           toast('流局を確定しました');
-          finishOrRender();
+          speakIfGameScreen('流局');
+          afterEventCommitted();
         },
       });
     };
   }
 
   function finishOrRender() {
-    const st = engine.deriveState(S.game);
-    if (st.finished) offerGameEndByLastKyoku();
-    else render();
+    afterEventCommitted();
   }
 
   function offerGameEndByLastKyoku() {
@@ -2578,13 +3690,15 @@ const ui = (function () {
       onConfirm: () => {
         commitStampedEvent(ev);
         toast('チョンボ処理を記録しました');
-        render();
+        speakIfGameScreen('チョンボ');
+        afterEventCommitted();
       },
     });
   }
 
   // ---- 対局中メニュー ----
   function openGameMenu() {
+    const chipEnabled = S.game.rules.chip && S.game.rules.chip.enabled;
     const overlay = openSheet(
       '<div class="sheet-header"><span></span><h2>メニュー</h2><button data-close class="iconbtn">×</button></div>' +
       '<div class="action-list">' +
@@ -2592,6 +3706,7 @@ const ui = (function () {
       '<button data-m="help">ヘルプ</button>' +
       '<button data-m="history">対局履歴</button>' +
       '<button data-m="adjust">点数調整</button>' +
+      (chipEnabled ? '<button data-m="chip">チップ精算</button>' : '') +
       '<button data-m="editinfo">対局情報修正</button>' +
       '<button data-m="midsettings">対局中設定</button>' +
       '<button data-m="seatmove">席の移動</button>' +
@@ -2615,6 +3730,11 @@ const ui = (function () {
     overlay.querySelector('[data-m="adjust"]').onclick = () => {
       closeOverlay(overlay);
       openAdjustSeatPicker();
+    };
+    const chipBtn = overlay.querySelector('[data-m="chip"]');
+    if (chipBtn) chipBtn.onclick = () => {
+      closeOverlay(overlay);
+      openChipSeatPicker();
     };
     overlay.querySelector('[data-m="editinfo"]').onclick = () => {
       closeOverlay(overlay);
@@ -2645,6 +3765,71 @@ const ui = (function () {
         openAdjustModal(+b.dataset.s);
       })
     );
+  }
+
+  // ---- v2.1(7.4): チップ精算(対局中の増減記録。CHIPイベント。ptには影響しない) ----
+  function openChipSeatPicker() {
+    const st = engine.deriveState(S.game);
+    const active = engine.activeSeats(st, S.game);
+    const chips = active.map((s) => '<button class="chip" data-s="' + s + '">' + playerName(S.game.seats[s].playerId) + '</button>').join('');
+    const overlay = openSheet(
+      '<div class="sheet-header"><span></span><h2>チップ精算: 対象を選択</h2><button data-close class="iconbtn">×</button></div>' +
+      '<div class="chips">' + chips + '</div>'
+    );
+    overlay.querySelector('[data-close]').onclick = () => closeOverlay(overlay);
+    overlay.querySelectorAll('[data-s]').forEach((b) =>
+      b.addEventListener('click', () => {
+        closeOverlay(overlay);
+        openChipModal(+b.dataset.s);
+      })
+    );
+  }
+  function openChipModal(seat) {
+    let val = 0;
+    const overlay = openSheet(
+      '<div class="sheet-header"><button data-close class="iconbtn">×</button><h2>' + playerName(S.game.seats[seat].playerId) + ' チップ増減</h2><span></span></div>' +
+      '<div class="sheet-body">' +
+      '<div class="adjust-display" id="chip-disp">0</div>' +
+      '<div class="numpad">' +
+      ['7', '8', '9', '4', '5', '6', '1', '2', '3', '', '0', '⌫']
+        .map((k) => (k ? '<button data-key="' + k + '">' + k + '</button>' : '<span></span>'))
+        .join('') +
+      '</div>' +
+      '<div class="hint">枚数(タップで±切替)。1枚=' + (S.game.rules.chip.valuePerChip || 0) + '円換算</div>' +
+      '<div style="padding:16px 14px;"><button class="btn btn-primary btn-block" data-confirm>確定</button></div>' +
+      '</div>'
+    );
+    let numStr = '';
+    let sign = 1;
+    function updateDisp() {
+      overlay.querySelector('#chip-disp').textContent = (sign < 0 ? '-' : '+') + (numStr || '0') + '枚';
+      overlay.querySelector('#chip-disp').style.color = sign < 0 ? 'var(--minus)' : 'var(--plus)';
+    }
+    overlay.querySelector('[data-close]').onclick = () => closeOverlay(overlay);
+    overlay.querySelectorAll('[data-key]').forEach((b) =>
+      b.addEventListener('click', () => {
+        const k = b.dataset.key;
+        if (k === '⌫') numStr = numStr.slice(0, -1);
+        else numStr = (numStr + k).replace(/^0+(?=\d)/, '').slice(0, 4);
+        updateDisp();
+      })
+    );
+    overlay.querySelector('#chip-disp').addEventListener('click', () => {
+      sign *= -1;
+      updateDisp();
+    });
+    updateDisp();
+    overlay.querySelector('[data-confirm]').onclick = () => {
+      const delta = sign * (parseInt(numStr, 10) || 0);
+      if (delta === 0) {
+        closeOverlay(overlay);
+        return;
+      }
+      appendEvent({ type: 'CHIP', seat, delta });
+      closeOverlay(overlay);
+      toast(playerName(S.game.seats[seat].playerId) + ' チップ ' + (delta > 0 ? '+' : '') + delta);
+      render();
+    };
   }
 
   function openHelpModal() {
@@ -2681,6 +3866,7 @@ const ui = (function () {
 
   function openMidGameSettings() {
     const r = S.game.rules;
+    const app = appSettings();
     const overlay = openSheet(
       '<div class="sheet-header"><button data-close class="iconbtn">×</button><h2>対局中設定</h2><span></span></div>' +
       '<div class="hint">精算系のみ対局中に変更できます(ウマ・レート等)</div>' +
@@ -2688,7 +3874,12 @@ const ui = (function () {
       '<div style="padding:0 14px;"><input class="txt" id="mg-uma" value="' + r.uma.join(',') + '"></div>' +
       '<label class="flabel">賭けレート(1pt=?円, 0で無効)</label>' +
       '<div style="padding:0 14px;"><input class="txt" type="number" id="mg-rate" value="' + (r.bet.enabled ? r.bet.ratePerPt : 0) + '"></div>' +
-      '<div style="padding:16px 14px;"><button class="btn btn-primary btn-block" data-save>保存</button></div>'
+      '<div style="padding:16px 14px;"><button class="btn btn-primary btn-block" data-save>保存</button></div>' +
+      '<div class="section-title">端末設定</div>' +
+      '<div class="card">' +
+      '<div class="list-row"><div class="label">音声読み上げ</div><div class="value"><button class="chip selected" data-toggle="voiceEnabled">' + (app.voiceEnabled ? 'ON' : 'OFF') + '</button></div></div>' +
+      '<div class="list-row"><div class="label">入力画面の回転</div><div class="value"><button class="chip selected" data-toggle="rotateSheets">' + (app.rotateSheets ? 'ON' : 'OFF') + '</button></div></div>' +
+      '</div>'
     );
     overlay.querySelector('[data-close]').onclick = () => closeOverlay(overlay);
     overlay.querySelector('[data-save]').onclick = () => {
@@ -2701,6 +3892,14 @@ const ui = (function () {
       closeOverlay(overlay);
       toast('対局中設定を更新しました');
     };
+    overlay.querySelectorAll('[data-toggle]').forEach((b) =>
+      b.addEventListener('click', () => {
+        const key = b.dataset.toggle;
+        const cur = appSettings()[key];
+        setAppSetting(key, !cur);
+        b.textContent = !cur ? 'ON' : 'OFF';
+      })
+    );
   }
 
   function openHistorySheet() {
@@ -2740,10 +3939,11 @@ const ui = (function () {
   function endGame() {
     const st = engine.deriveState(S.game);
     const finalPoints = S.game.seats.map((_, i) => ({ seat: i, points: st.points[i] }));
+    const extras = deriveExtrasFromEvents(S.game, st);
     S.game.endedAt = Date.now();
     S.game.durationMin = Math.round((S.game.endedAt - S.game.startedAt) / 60000);
     S.game.status = 'finished';
-    S.game.result = buildResult(S.game, finalPoints);
+    S.game.result = buildResult(S.game, finalPoints, extras);
     S.game.stats = st.stats;
     S.pendingResult = S.game;
     S.game = null;
@@ -2759,7 +3959,7 @@ const ui = (function () {
     const ranked = [...game.result].sort((a, b) => a.rank - b.rank);
     const left = readonly ? '<span class="side"><button class="iconbtn" data-act="back">‹</button></span>' : '<span class="side"></span>';
     const right = isPending
-      ? '<span class="side"></span>'
+      ? '<span class="side"><button class="iconbtn" data-act="share">↗︎</button></span>'
       : '<span class="side"><button class="iconbtn" data-act="edit">✎</button><button class="iconbtn" data-act="share">↗︎</button></span>';
     return (
       topbar(isPending ? '対局終了' : '対局詳細', left, right) +
@@ -2777,19 +3977,47 @@ const ui = (function () {
   }
 
   function resultTabHtml(game, ranked) {
-    return ranked
-      .map((r) => {
-        const nm = playerName(r.playerId);
+    return (
+      ranked
+        .map((r) => {
+          const nm = playerName(r.playerId);
+          return (
+            '<div class="rank-card">' +
+            '<div class="rank-num r' + r.rank + '">' + r.rank + '</div>' +
+            '<div class="rank-info"><div class="nm">' + nm + (r.yakitori ? ' 🐤' : '') + '</div>' +
+            '<div class="sub">最終 ' + fmtPts(r.finalPoints) + '点 ・ 素点' + fmtPt(r.rawPt) + ' ウマ' + fmtPt(r.umaPt) + (r.okaPt ? ' オカ' + fmtPt(r.okaPt) : '') + (r.yen != null ? ' ・ ' + r.yen.toLocaleString() + '円' : '') + '</div></div>' +
+            '<div class="rank-pt ' + (r.totalPt >= 0 ? 'pos' : 'neg') + '">' + fmtPt(r.totalPt) + '</div>' +
+            '</div>'
+          );
+        })
+        .join('') +
+      venueCardHtml(game) +
+      '<div style="padding:14px 14px 4px;"><button class="btn btn-ghost btn-block" data-act="venue" style="border:1px solid var(--line);">場代精算' + (game.venue ? '(再編集)' : '') + '</button></div>'
+    );
+  }
+
+  // ---- v2.0: 6.14.4 場代精算済みカード ----
+  function venueCardHtml(game) {
+    if (!game.venue) return '';
+    const methodLabel = { equal: '均等割り', weighted: '傾斜', topExempt: 'トップ免除' }[game.venue.method] || game.venue.method;
+    const rows = (game.venue.settlements || [])
+      .map((s) => {
+        const seatInfo = game.seats[s.seat];
+        const nm = seatInfo ? (seatInfo.name || playerName(seatInfo.playerId)) : '席' + s.seat;
         return (
-          '<div class="rank-card">' +
-          '<div class="rank-num r' + r.rank + '">' + r.rank + '</div>' +
-          '<div class="rank-info"><div class="nm">' + nm + (r.yakitori ? ' 🐤' : '') + '</div>' +
-          '<div class="sub">最終 ' + fmtPts(r.finalPoints) + '点 ・ 素点' + fmtPt(r.rawPt) + ' ウマ' + fmtPt(r.umaPt) + (r.okaPt ? ' オカ' + fmtPt(r.okaPt) : '') + (r.yen != null ? ' ・ ' + r.yen.toLocaleString() + '円' : '') + '</div></div>' +
-          '<div class="rank-pt ' + (r.totalPt >= 0 ? 'pos' : 'neg') + '">' + fmtPt(r.totalPt) + '</div>' +
-          '</div>'
+          '<div class="venue-row"><div><div class="nm">' + nm + '</div>' +
+          '<div class="sub">賭け ' + (s.betYen >= 0 ? '+' : '') + s.betYen.toLocaleString() + '円 ・ 場代負担 -' + s.burdenYen.toLocaleString() + '円</div></div>' +
+          '<div class="final ' + (s.finalYen >= 0 ? 'pos' : 'neg') + '">' + (s.finalYen >= 0 ? '+' : '') + s.finalYen.toLocaleString() + '円</div></div>'
         );
       })
       .join('');
+    return (
+      '<div class="section-title">場代精算済み(最終支払)</div>' +
+      '<div class="card">' +
+      '<div class="list-row"><div class="label">場代総額</div><div class="value">' + game.venue.totalYen.toLocaleString() + '円 ・ ' + methodLabel + '</div></div>' +
+      rows +
+      '</div>'
+    );
   }
 
   function historyTabHtml(game) {
@@ -2817,11 +4045,11 @@ const ui = (function () {
       }
     });
     const chart = buildLineChartSvg(series, seatNames);
-    const stats = game.stats || game.seats.map(() => ({ wins: 0, deals: 0, riichis: 0, chombo: 0 }));
+    const gameStats = game.stats || game.seats.map(() => ({ wins: 0, deals: 0, riichis: 0, chombo: 0 }));
     const statHtml = seatNames
       .map(
         (nm, i) =>
-          '<div class="stat-row"><div class="nm">' + nm + '</div><div class="col">和' + (stats[i] ? stats[i].wins : 0) + '</div><div class="col">放' + (stats[i] ? stats[i].deals : 0) + '</div></div>'
+          '<div class="stat-row"><div class="nm">' + nm + '</div><div class="col">和' + (gameStats[i] ? gameStats[i].wins : 0) + '</div><div class="col">放' + (gameStats[i] ? gameStats[i].deals : 0) + '</div></div>'
       )
       .join('');
     return (
@@ -2865,6 +4093,191 @@ const ui = (function () {
     );
   }
 
+  // ---- v2.0: 6.14 場代精算モーダル(F-34) ----
+  function defaultVenueWeights(seatCount) {
+    return seatCount === 3 ? [10, 30, 60] : [10, 20, 30, 40];
+  }
+  function persistGameChange(game, isPending) {
+    if (isPending) {
+      render();
+      return;
+    }
+    backfillSeatNames(game);
+    storage.saveGame(game);
+    sync.queueGameSave(game);
+    sync.flushQueue();
+    render();
+  }
+  function openVenueModal(game, isPending) {
+    const ranked = [...game.result].sort((a, b) => a.rank - b.rank);
+    const seatsByRank = ranked.map((r) => r.seat);
+    const betYenBySeat = {};
+    game.result.forEach((r) => {
+      betYenBySeat[r.seat] = r.yen || 0;
+    });
+    const n = seatsByRank.length;
+    const v = game.venue;
+    const state = {
+      totalYen: v ? v.totalYen : 0,
+      method: v ? v.method : 'equal',
+      weights: v && v.weights ? v.weights.slice() : defaultVenueWeights(n),
+      payerSeat: v && v.payerSeat != null ? v.payerSeat : -1,
+    };
+
+    function nameOfRankIdx(i) {
+      const seat = seatsByRank[i];
+      return playerName(game.seats[seat].playerId);
+    }
+
+    function computeHtml() {
+      const weightsOk = state.method !== 'weighted' || state.weights.reduce((a, b) => a + (b || 0), 0) === 100;
+      let settlements = [];
+      if (weightsOk && state.totalYen >= 0) {
+        settlements = domain.venueSettlement(state.totalYen, state.method, state.weights, seatsByRank, betYenBySeat);
+      }
+      const rows = seatsByRank
+        .map((seat, i) => {
+          const s = settlements[i] || { betYen: betYenBySeat[seat] || 0, burdenYen: 0, finalYen: betYenBySeat[seat] || 0 };
+          return (
+            '<div class="venue-row"><div><div class="nm">' + (i + 1) + '位 ' + nameOfRankIdx(i) + '</div>' +
+            '<div class="sub">賭け ' + (s.betYen >= 0 ? '+' : '') + s.betYen.toLocaleString() + '円 ・ 場代負担 -' + s.burdenYen.toLocaleString() + '円</div></div>' +
+            '<div class="final ' + (s.finalYen >= 0 ? 'pos' : 'neg') + '">' + (s.finalYen >= 0 ? '+' : '') + s.finalYen.toLocaleString() + '円</div></div>'
+          );
+        })
+        .join('');
+      const sumBurden = settlements.reduce((a, s) => a + s.burdenYen, 0);
+      const sumFinal = settlements.reduce((a, s) => a + s.finalYen, 0);
+      const checkHtml = !weightsOk
+        ? '<div class="venue-check-row err">傾斜%の合計が100ではありません(現在' + state.weights.reduce((a, b) => a + (b || 0), 0) + '%)</div>'
+        : '<div class="venue-check-row ok">場代合計 ' + sumBurden.toLocaleString() + '円 / 収支合計 ' + (sumFinal >= 0 ? '+' : '') + sumFinal.toLocaleString() + '円 ✓</div>';
+      let transferHtml = '';
+      if (weightsOk && state.payerSeat >= 0) {
+        const transfers = domain.venueTransfers(settlements, state.payerSeat);
+        transferHtml =
+          '<div class="section-title">送金リスト</div><div class="card">' +
+          (transfers.length
+            ? transfers.map((t) => '<div class="venue-transfer"><span>' + playerName(game.seats[t.from].playerId) + ' → ' + playerName(game.seats[t.to].playerId) + '</span><span>' + t.amount.toLocaleString() + '円</span></div>').join('')
+            : '<div class="list-row"><div class="label" style="color:var(--sub);">送金は発生しません</div></div>') +
+          '</div>';
+      }
+      return { rowsHtml: rows, checkHtml, transferHtml, weightsOk };
+    }
+
+    function weightsInputHtml() {
+      if (state.method !== 'weighted') return '';
+      return (
+        '<div class="venue-weights">' +
+        seatsByRank
+          .map((seat, i) => '<div class="wcell"><label>' + (i + 1) + '位%</label><input type="number" data-w="' + i + '" value="' + (state.weights[i] || 0) + '"></div>')
+          .join('') +
+        '</div>'
+      );
+    }
+
+    function payerOptionsHtml() {
+      return (
+        '<option value="-1"' + (state.payerSeat === -1 ? ' selected' : '') + '>なし(各自払い)</option>' +
+        seatsByRank.map((seat, i) => '<option value="' + seat + '"' + (state.payerSeat === seat ? ' selected' : '') + '>' + nameOfRankIdx(i) + '</option>').join('')
+      );
+    }
+
+    const overlay = openSheet(
+      '<div class="sheet-header"><button data-close class="iconbtn">×</button><h2>場代精算</h2><span></span></div>' +
+      '<label class="flabel">場代総額(円)</label>' +
+      '<div class="stepper-row"><button class="stepper-btn" data-step="-100">−</button><input class="txt" id="venue-total" type="number" step="100" value="' + state.totalYen + '"><button class="stepper-btn" data-step="100">+</button></div>' +
+      '<label class="flabel">負担方式</label>' +
+      '<div class="seg" style="margin:0 14px 6px;width:auto;" id="venue-method-seg">' +
+      ['equal', 'weighted', 'topExempt']
+        .map((m) => '<button class="' + (state.method === m ? 'active' : '') + '" data-method="' + m + '">' + (m === 'equal' ? '均等割り' : m === 'weighted' ? '傾斜' : 'トップ免除') + '</button>')
+        .join('') +
+      '</div>' +
+      '<div id="venue-weights-wrap">' + weightsInputHtml() + '</div>' +
+      '<label class="flabel">立替者</label>' +
+      '<div style="padding:0 14px;"><select class="txt" id="venue-payer">' + payerOptionsHtml() + '</select></div>' +
+      '<div id="venue-check" style="margin-top:8px;"></div>' +
+      '<div class="card" id="venue-rows" style="margin-top:6px;"></div>' +
+      '<div id="venue-transfers"></div>' +
+      '<div style="padding:16px 14px 10px;display:flex;gap:10px;">' +
+      (game.venue ? '<button class="btn btn-danger-text" data-delete>削除</button>' : '') +
+      '<button class="btn btn-primary btn-block" data-save>保存</button>' +
+      '</div>',
+      { full: true }
+    );
+
+    function refresh() {
+      const c = computeHtml();
+      overlay.querySelector('#venue-rows').innerHTML = c.rowsHtml;
+      overlay.querySelector('#venue-check').innerHTML = c.checkHtml;
+      overlay.querySelector('#venue-transfers').innerHTML = c.transferHtml;
+      overlay.querySelector('[data-save]').disabled = !c.weightsOk;
+      overlay.querySelector('[data-save]').style.opacity = c.weightsOk ? '1' : '.4';
+    }
+
+    overlay.querySelector('[data-close]').onclick = () => closeOverlay(overlay);
+    const totalInput = overlay.querySelector('#venue-total');
+    totalInput.oninput = () => {
+      state.totalYen = Math.max(0, parseInt(totalInput.value, 10) || 0);
+      refresh();
+    };
+    overlay.querySelectorAll('[data-step]').forEach((b) =>
+      b.addEventListener('click', () => {
+        state.totalYen = Math.max(0, state.totalYen + parseInt(b.dataset.step, 10));
+        totalInput.value = state.totalYen;
+        refresh();
+      })
+    );
+    overlay.querySelectorAll('[data-method]').forEach((b) =>
+      b.addEventListener('click', () => {
+        state.method = b.dataset.method;
+        overlay.querySelectorAll('[data-method]').forEach((x) => x.classList.toggle('active', x === b));
+        overlay.querySelector('#venue-weights-wrap').innerHTML = weightsInputHtml();
+        bindWeightInputs();
+        refresh();
+      })
+    );
+    function bindWeightInputs() {
+      overlay.querySelectorAll('[data-w]').forEach((inp) =>
+        inp.addEventListener('input', () => {
+          state.weights[parseInt(inp.dataset.w, 10)] = parseFloat(inp.value) || 0;
+          refresh();
+        })
+      );
+    }
+    bindWeightInputs();
+    overlay.querySelector('#venue-payer').onchange = (e) => {
+      state.payerSeat = parseInt(e.target.value, 10);
+      refresh();
+    };
+    overlay.querySelector('[data-save]').onclick = () => {
+      const c = computeHtml();
+      if (!c.weightsOk) return;
+      const settlements = domain.venueSettlement(state.totalYen, state.method, state.weights, seatsByRank, betYenBySeat);
+      game.venue = {
+        totalYen: state.totalYen,
+        method: state.method,
+        weights: state.method === 'weighted' ? state.weights.slice() : undefined,
+        payerSeat: state.payerSeat >= 0 ? state.payerSeat : undefined,
+        settlements,
+        updatedAt: Date.now(),
+      };
+      game.updatedAt = Date.now();
+      closeOverlay(overlay);
+      persistGameChange(game, isPending);
+      toast('場代精算を保存しました');
+    };
+    const deleteBtn = overlay.querySelector('[data-delete]');
+    if (deleteBtn) {
+      deleteBtn.onclick = () => {
+        delete game.venue;
+        game.updatedAt = Date.now();
+        closeOverlay(overlay);
+        persistGameChange(game, isPending);
+        toast('場代精算を削除しました');
+      };
+    }
+    refresh();
+  }
+
   function bindResultScreen(game, isPending) {
     $app.querySelectorAll('[data-subtab]').forEach((b) =>
       b.addEventListener('click', () => {
@@ -2874,6 +4287,10 @@ const ui = (function () {
     );
     const back = $app.querySelector('[data-act="back"]');
     if (back) back.onclick = () => navigate('#/records');
+    const venueBtn = $app.querySelector('[data-act="venue"]');
+    if (venueBtn) venueBtn.onclick = () => openVenueModal(game, isPending);
+    const shareBtn0 = $app.querySelector('[data-act="share"]');
+    if (shareBtn0) shareBtn0.onclick = () => openShareActionSheet(game);
     if (isPending) {
       $app.querySelector('[data-act="save"]').onclick = () => {
         backfillSeatNames(game);
@@ -2893,20 +4310,37 @@ const ui = (function () {
       };
     } else {
       const editBtn = $app.querySelector('[data-act="edit"]');
-      if (editBtn) editBtn.onclick = () => {
-        const memo = prompt('メモを編集', game.memo || '');
-        if (memo != null) {
-          game.memo = memo;
-          backfillSeatNames(game);
-          storage.saveGame(game);
-          sync.queueGameSave(game);
-          sync.flushQueue();
-          render();
-        }
-      };
-      const shareBtn = $app.querySelector('[data-act="share"]');
-      if (shareBtn) shareBtn.onclick = () => exportGamesAsJson([game]);
+      if (editBtn) editBtn.onclick = () => openFinishedGameEditInfo(game);
     }
+  }
+
+  function openFinishedGameEditInfo(game) {
+    const sessions = storage.getSessions().filter((s) => !s.deleted).sort((a, b) => b.startedAt - a.startedAt);
+    const overlay = openSheet(
+      '<div class="sheet-header"><button data-close class="iconbtn">×</button><h2>対局情報修正</h2><span></span></div>' +
+      '<label class="flabel">メモ</label>' +
+      '<div style="padding:0 14px;"><textarea class="memo" id="fg-memo">' + (game.memo || '') + '</textarea></div>' +
+      '<label class="flabel">会</label>' +
+      '<div style="padding:0 14px;"><select class="txt" id="fg-session">' +
+      '<option value="">未所属</option>' +
+      sessions.map((s) => '<option value="' + s.id + '"' + (game.sessionId === s.id ? ' selected' : '') + '>' + s.name + '</option>').join('') +
+      '</select></div>' +
+      '<div style="padding:16px 14px;"><button class="btn btn-primary btn-block" data-save>保存</button></div>'
+    );
+    overlay.querySelector('[data-close]').onclick = () => closeOverlay(overlay);
+    overlay.querySelector('[data-save]').onclick = () => {
+      game.memo = overlay.querySelector('#fg-memo').value;
+      const sid = overlay.querySelector('#fg-session').value;
+      game.sessionId = sid || undefined;
+      game.updatedAt = Date.now();
+      backfillSeatNames(game);
+      storage.saveGame(game);
+      sync.queueGameSave(game);
+      sync.flushQueue();
+      closeOverlay(overlay);
+      toast('保存しました');
+      render();
+    };
   }
 
   // =================================================================
@@ -2914,16 +4348,22 @@ const ui = (function () {
   // =================================================================
   function screenRecords() {
     sync.pullAndMerge().then((res) => {
-      if (res && res.ok && (res.merged || res.mergedPlayers)) {
+      if (res && res.ok && (res.merged || res.mergedPlayers || res.mergedSessions)) {
         S.players = storage.getPlayers();
         if (currentRoute().startsWith('#/records')) render();
       }
     });
     const view = S.recordsView;
+    const right = view === 'list'
+      ? '<span class="side"><button class="iconbtn" data-act="toggle-select">' + (S.selectMode ? '完了' : '選択') + '</button></span>'
+      : '<span class="side"></span>';
     return (
-      topbar('戦績') +
-      '<div class="seg"><button class="' + (view === 'list' ? 'active' : '') + '" data-view="list">対局一覧</button><button class="' + (view === 'players' ? 'active' : '') + '" data-view="players">プレイヤー</button></div>' +
-      (view === 'list' ? recordsListHtml() : screenPlayersStatsInner())
+      topbar('戦績', '<span class="side"></span>', right) +
+      '<div class="seg"><button class="' + (view === 'list' ? 'active' : '') + '" data-view="list">対局一覧</button><button class="' + (view === 'players' ? 'active' : '') + '" data-view="players">プレイヤー</button><button class="' + (view === 'sessions' ? 'active' : '') + '" data-view="sessions">会</button></div>' +
+      (view === 'list' ? recordsListHtml() : view === 'players' ? screenPlayersStatsInner() : sessionsListHtml()) +
+      (view === 'list' && S.selectMode
+        ? '<div class="select-toolbar"><span class="hint" style="align-self:center;margin-right:auto;">' + S.selectedIds.length + '件選択中</span><button class="btn btn-ghost" data-act="select-all">全選択</button><button class="btn btn-primary" data-act="select-share">QR/URLで共有</button></div>'
+        : '')
     );
   }
 
@@ -2943,8 +4383,10 @@ const ui = (function () {
     const cards = filtered
       .map((g) => {
         const ranked = [...(g.result || [])].sort((a, b) => a.rank - b.rank);
+        const checked = S.selectedIds.includes(g.id);
         return (
-          '<div class="game-list-card tap" data-open="' + g.id + '">' +
+          '<div class="game-list-card tap' + (S.selectMode ? ' selectable' : '') + '" data-open="' + g.id + '">' +
+          (S.selectMode ? '<span class="sel-check' + (checked ? ' checked' : '') + '">' + (checked ? '✓' : '') + '</span>' : '') +
           '<div class="game-list-head"><span>' + fmtDateTime(g.startedAt) + ' ・ MF' + g.serialNo + '</span><span>' + (g.durationMin != null ? g.durationMin + '分' : '') + '</span></div>' +
           ranked.map((r) => '<div class="mini-rank"><span>' + r.rank + '位 ' + playerName(r.playerId) + '</span><span class="pt ' + (r.totalPt >= 0 ? 'pos' : 'neg') + '">' + fmtPt(r.totalPt) + '</span></div>').join('') +
           '</div>'
@@ -2954,7 +4396,7 @@ const ui = (function () {
     return (
       '<div class="chips">' + chips + '<span style="margin-left:auto;color:var(--sub);font-size:12px;align-self:center;">' + filtered.length + '/' + games.length + '件</span></div>' +
       (filtered.length ? cards : '<div class="empty-state"><div class="big">🀄</div>まだ対局がありません</div>') +
-      '<div style="height:20px;"></div>'
+      '<div style="height:' + (S.selectMode ? '70px' : '20px') + ';"></div>'
     );
   }
 
@@ -2965,15 +4407,49 @@ const ui = (function () {
         render();
       })
     );
+    $app.querySelectorAll('[data-session-card]').forEach((b) =>
+      b.addEventListener('click', () => navigate('#/sessions/' + b.dataset.sessionCard))
+    );
     $app.querySelectorAll('[data-filter]').forEach((b) =>
       b.addEventListener('click', () => {
         S.recordsFilter = b.dataset.filter;
         render();
       })
     );
+    const toggleSel = $app.querySelector('[data-act="toggle-select"]');
+    if (toggleSel) toggleSel.onclick = () => {
+      S.selectMode = !S.selectMode;
+      S.selectedIds = [];
+      render();
+    };
     $app.querySelectorAll('[data-open]').forEach((b) =>
-      b.addEventListener('click', () => navigate('#/records/' + b.dataset.open))
+      b.addEventListener('click', () => {
+        if (S.selectMode) {
+          const id = b.dataset.open;
+          const i = S.selectedIds.indexOf(id);
+          if (i >= 0) S.selectedIds.splice(i, 1);
+          else S.selectedIds.push(id);
+          render();
+        } else {
+          navigate('#/records/' + b.dataset.open);
+        }
+      })
     );
+    const selAll = $app.querySelector('[data-act="select-all"]');
+    if (selAll) selAll.onclick = () => {
+      const games = storage.getGames().filter((g) => g.status === 'finished' && !g.deleted && (S.recordsFilter === 'all' || g.mode === S.recordsFilter));
+      S.selectedIds = games.map((g) => g.id);
+      render();
+    };
+    const selShare = $app.querySelector('[data-act="select-share"]');
+    if (selShare) selShare.onclick = () => {
+      if (S.selectedIds.length === 0) {
+        toast('対局を選択してください');
+        return;
+      }
+      const games = storage.getGames().filter((g) => S.selectedIds.includes(g.id));
+      openDataShareModal(games);
+    };
     bindPlayersStatsScreen();
   }
 
@@ -2984,11 +4460,11 @@ const ui = (function () {
     const games = storage.getGames().filter((g) => g.status === 'finished' && !g.deleted);
     const agg = {};
     S.players.forEach((p) => {
-      agg[p.id] = { name: p.name, count: 0, totalPt: 0, totalYen: 0, rankSum: 0 };
+      agg[p.id] = { id: p.id, name: p.name, count: 0, totalPt: 0, totalYen: 0, rankSum: 0 };
     });
     games.forEach((g) => {
       (g.result || []).forEach((r) => {
-        if (!agg[r.playerId]) agg[r.playerId] = { name: playerName(r.playerId), count: 0, totalPt: 0, totalYen: 0, rankSum: 0 };
+        if (!agg[r.playerId]) agg[r.playerId] = { id: r.playerId, name: playerName(r.playerId), count: 0, totalPt: 0, totalYen: 0, rankSum: 0 };
         agg[r.playerId].count++;
         agg[r.playerId].totalPt += r.totalPt;
         agg[r.playerId].totalYen += r.yen || 0;
@@ -3000,20 +4476,136 @@ const ui = (function () {
       .sort((a, b) => b.totalPt - a.totalPt)
       .map(
         (a) =>
-          '<div class="stat-row"><div class="nm">' + a.name + '<div style="font-size:11px;color:var(--sub);">' + a.count + '戦</div></div>' +
-          '<div class="col">' + fmtPt(a.totalPt) + '</div><div class="col">' + a.totalYen.toLocaleString() + '円</div><div class="col">' + (a.rankSum / a.count).toFixed(2) + '位</div></div>'
+          '<div class="stat-row tap" data-player="' + a.id + '"><div class="nm">' + a.name + '<div style="font-size:11px;color:var(--sub);">' + a.count + '戦</div></div>' +
+          '<div class="col">' + fmtPt(a.totalPt) + '</div><div class="col">' + a.totalYen.toLocaleString() + '円</div><div class="col">' + (a.rankSum / a.count).toFixed(2) + '位</div><span class="chev">›</span></div>'
       )
       .join('');
     return (
       '<div class="stat-head"><div class="nm">プレイヤー</div><div class="col">合計pt</div><div class="col">収支</div><div class="col">平均順位</div></div>' +
       '<div class="card">' + (rows || '<div class="list-row"><div class="label" style="color:var(--sub);">データがありません</div></div>') + '</div>' +
+      '<div class="hint" style="text-align:center;">行タップでプレイヤー詳細統計へ</div>' +
       '<div style="height:20px;"></div>'
     );
   }
   function screenPlayersStats() {
     return topbar('プレイヤー別集計') + screenPlayersStatsInner();
   }
-  function bindPlayersStatsScreen() {}
+  function bindPlayersStatsScreen() {
+    $app.querySelectorAll('[data-player]').forEach((row) =>
+      row.addEventListener('click', () => navigate('#/players-stats/' + encodeURIComponent(row.dataset.player)))
+    );
+  }
+
+  // =================================================================
+  // v2.0: F-33 プレイヤー詳細統計(6.13)
+  // =================================================================
+  const STATS_PERIODS = [
+    ['all', '全期間'],
+    ['month', '今月'],
+    ['30d', '直近30日'],
+  ];
+  function periodRange(period) {
+    if (period === 'month') {
+      const now = new Date();
+      const from = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+      return { from };
+    }
+    if (period === '30d') {
+      return { from: Date.now() - 30 * 24 * 3600 * 1000 };
+    }
+    return {};
+  }
+  function rankBarHtml(rankCounts, maxSeats, count) {
+    if (!count || !maxSeats) return '<div class="hint">対局がありません</div>';
+    const colors = ['#e8c04c', '#b9bcc4', '#c98a4b', '#8a8a8e'];
+    let segs = '';
+    for (let rk = 1; rk <= maxSeats; rk++) {
+      const c = rankCounts[rk] || 0;
+      const pct = (c / count) * 100;
+      if (pct <= 0) continue;
+      segs += '<div class="seg" style="width:' + pct + '%;background:' + colors[rk - 1] + ';">' + (pct >= 10 ? rk + '位 ' + pct.toFixed(0) + '%' : '') + '</div>';
+    }
+    const tableRows = [];
+    for (let rk = 1; rk <= maxSeats; rk++) {
+      const c = rankCounts[rk] || 0;
+      tableRows.push('<div class="list-row"><div class="label">' + rk + '位</div><div class="value">' + c + '回 (' + ((c / count) * 100).toFixed(1) + '%)</div></div>');
+    }
+    return '<div class="rankbar">' + segs + '</div><div class="card">' + tableRows.join('') + '</div>';
+  }
+  function screenPlayerDetail(playerId) {
+    const f = S.playerStatsFilter;
+    const games = stats.filterGames(storage.getGames(), f.mode, periodRange(f.period));
+    const sm = stats.summary(games, playerId);
+    const sty = stats.styleMetrics(games, playerId);
+    const rivals = stats.rivalStats(games, playerId).slice(0, 12);
+    const pct = (v) => (v == null ? '—' : (v * 100).toFixed(1) + '%');
+    const modeChips = [
+      ['all', 'まとめる'],
+      ['yonma', '4人麻雀'],
+      ['sanma', '3人麻雀'],
+      ['yonin_sanma', '4人3麻'],
+    ]
+      .map(([v, l]) => '<button class="chip ' + (f.mode === v ? 'selected' : '') + '" data-pfmode="' + v + '">' + l + '</button>')
+      .join('');
+    const periodChips = STATS_PERIODS.map(([v, l]) => '<button class="chip ' + (f.period === v ? 'selected' : '') + '" data-pfperiod="' + v + '">' + l + '</button>').join('');
+    const series = sm.trend.map((t) => t.cum);
+    const chart = series.length > 1 ? buildLineChartSvg([series.length ? series : [0]], [playerName(playerId)]) : '<div class="hint" style="padding:20px;">対局がありません</div>';
+    const noteHtml = sty.evGameCount < sm.count
+      ? '<div class="hint">※局単位の指標は履歴のある ' + sty.evGameCount + '/' + sm.count + ' 対局から算出</div>'
+      : '';
+    return (
+      topbar(playerName(playerId), '<span class="side"><button class="iconbtn" data-act="back">‹</button></span>', '<span class="side"></span>') +
+      '<div class="chips" style="padding-top:8px;">' + modeChips + '</div>' +
+      '<div class="chips" style="padding-top:0;">' + periodChips + '</div>' +
+      '<div class="section-title">サマリ</div>' +
+      '<div class="metric-grid">' +
+      '<div class="metric-cell"><div class="v">' + sm.count + '</div><div class="l">対局数</div></div>' +
+      '<div class="metric-cell"><div class="v ' + (sm.sumPt >= 0 ? 'pos' : 'neg') + '" style="color:' + (sm.sumPt >= 0 ? 'var(--plus)' : 'var(--minus)') + ';">' + fmtPt(sm.sumPt) + '</div><div class="l">合計pt</div></div>' +
+      '<div class="metric-cell"><div class="v">' + sm.sumYen.toLocaleString() + '円</div><div class="l">総収支(賭け対局)</div></div>' +
+      '<div class="metric-cell"><div class="v">' + sm.avgRank.toFixed(2) + '位</div><div class="l">平均順位</div></div>' +
+      '</div>' +
+      '<div class="section-title">順位分布</div>' +
+      rankBarHtml(sm.rankCounts, sm.maxSeats, sm.count) +
+      '<div class="card" style="margin-top:8px;">' +
+      '<div class="list-row"><div class="label">連対率</div><div class="value">' + (sm.rentaiRate * 100).toFixed(1) + '%</div></div>' +
+      '<div class="list-row"><div class="label">ラス回避率</div><div class="value">' + (sm.lastAvoidRate * 100).toFixed(1) + '%</div></div>' +
+      '</div>' +
+      '<div class="section-title">プレイスタイル指標</div>' +
+      noteHtml +
+      '<div class="metric-grid">' +
+      '<div class="metric-cell"><div class="v">' + pct(sty.winRate) + '</div><div class="l">和了率(' + sty.wins + '/' + sty.totalKyoku + ')</div></div>' +
+      '<div class="metric-cell"><div class="v">' + pct(sty.dealRate) + '</div><div class="l">放銃率(' + sty.deals + '/' + sty.totalKyoku + ')</div></div>' +
+      '<div class="metric-cell"><div class="v">' + pct(sty.riichiRate) + '</div><div class="l">リーチ率</div></div>' +
+      '<div class="metric-cell"><div class="v">' + pct(sty.tsumoRate) + '</div><div class="l">ツモ率</div></div>' +
+      '<div class="metric-cell"><div class="v">' + (sty.avgWinPoints == null ? '—' : sty.avgWinPoints.toLocaleString() + '点') + '</div><div class="l">平均打点</div></div>' +
+      '<div class="metric-cell"><div class="v">' + sty.chombo + '</div><div class="l">チョンボ回数</div></div>' +
+      '</div>' +
+      '<div class="section-title">pt推移</div>' +
+      '<div class="card" style="padding:10px;">' + chart + '</div>' +
+      '<div class="section-title">直対収支</div>' +
+      '<div class="card">' +
+      (rivals.length
+        ? rivals.map((r) => '<div class="rival-row"><span>' + playerName(r.playerId) + '<span style="color:var(--sub);"> ・ ' + r.count + '戦</span></span><span>' + fmtPt(r.ptSum) + ' <span style="color:var(--sub);">(' + r.win + '勝' + r.lose + '敗)</span></span></div>').join('')
+        : '<div class="list-row"><div class="label" style="color:var(--sub);">同卓経験のある相手がいません</div></div>') +
+      '</div>' +
+      '<div style="height:24px;"></div>'
+    );
+  }
+  function bindPlayerDetailScreen(playerId) {
+    $app.querySelector('[data-act="back"]').onclick = () => navigate('#/records');
+    $app.querySelectorAll('[data-pfmode]').forEach((b) =>
+      b.addEventListener('click', () => {
+        S.playerStatsFilter.mode = b.dataset.pfmode;
+        render();
+      })
+    );
+    $app.querySelectorAll('[data-pfperiod]').forEach((b) =>
+      b.addEventListener('click', () => {
+        S.playerStatsFilter.period = b.dataset.pfperiod;
+        render();
+      })
+    );
+  }
 
   // =================================================================
   // SETTINGS SCREEN (#/settings)
@@ -3068,6 +4660,78 @@ const ui = (function () {
     );
   }
 
+  // ---- v2.1(6.8/7.6): 定番候補チップ+カスタム欄の2段構成選択シート ----
+  function chipCustomDialog(label, candidates, currentValue, onSave, opts) {
+    opts = opts || {};
+    const isArrayType = Array.isArray(currentValue);
+    const curStr = isArrayType ? currentValue.join(',') : String(currentValue);
+    const matchIdx = candidates.findIndex((c) => (Array.isArray(c.value) ? c.value.join(',') : String(c.value)) === curStr);
+    const chipsHtml = candidates
+      .map((c, i) => {
+        const val = Array.isArray(c.value) ? c.value.join(',') : c.value;
+        return '<button class="chip ' + (i === matchIdx ? 'selected' : '') + '" data-chip-v="' + val + '">' + c.label + '</button>';
+      })
+      .join('');
+    const overlay = openSheet(
+      '<div class="sheet-header"><span></span><h2>' + label + '</h2><button data-close class="iconbtn">×</button></div>' +
+      '<div class="chips">' + chipsHtml + '</div>' +
+      '<label class="flabel">カスタム' + (opts.unit ? '(' + opts.unit + ')' : '') + '</label>' +
+      '<div style="padding:0 14px;"><input class="txt" id="cc-custom" value="' + (matchIdx >= 0 ? '' : curStr) + '" placeholder="' + (isArrayType ? 'カンマ区切り 例: 10,5,-5,-10' : '数値') + '"></div>' +
+      '<div style="padding:16px 14px;"><button class="btn btn-primary btn-block" data-save>保存</button></div>'
+    );
+    overlay.querySelector('[data-close]').onclick = () => closeOverlay(overlay);
+    overlay.querySelectorAll('[data-chip-v]').forEach((b) =>
+      b.addEventListener('click', () => {
+        const raw = b.dataset.chipV;
+        const val = isArrayType ? raw.split(',').map(Number) : parseFloat(raw);
+        closeOverlay(overlay);
+        onSave(val);
+      })
+    );
+    overlay.querySelector('[data-save]').onclick = () => {
+      const raw = overlay.querySelector('#cc-custom').value.trim();
+      if (!raw) return;
+      const val = isArrayType ? raw.split(',').map((x) => parseFloat(x.trim())).filter((x) => !isNaN(x)) : parseFloat(raw);
+      if (isArrayType ? val.length === 0 : isNaN(val)) return;
+      closeOverlay(overlay);
+      onSave(val);
+    };
+  }
+
+  // ---- v2.1(7.6): 最初の持ち点/返す点数(セット選択) ----
+  function startReturnPointsDialog(current, onSave) {
+    const candidates = [
+      [25000, 30000], [25000, 25000], [30000, 30000], [30000, 35000], [35000, 40000],
+    ];
+    const curStr = current.startPoints + '/' + current.returnPoints;
+    const chipsHtml = candidates
+      .map(([sp, rp]) => '<button class="chip ' + (sp + '/' + rp === curStr ? 'selected' : '') + '" data-sp="' + sp + '" data-rp="' + rp + '">' + sp.toLocaleString() + '/' + rp.toLocaleString() + '</button>')
+      .join('');
+    const overlay = openSheet(
+      '<div class="sheet-header"><span></span><h2>最初の持ち点/返す点数</h2><button data-close class="iconbtn">×</button></div>' +
+      '<div class="chips">' + chipsHtml + '</div>' +
+      '<label class="flabel">カスタム: 最初の持ち点</label>' +
+      '<div style="padding:0 14px;"><input class="txt" id="cc-start" type="number" value="' + current.startPoints + '"></div>' +
+      '<label class="flabel">カスタム: 返す点数</label>' +
+      '<div style="padding:0 14px;"><input class="txt" id="cc-return" type="number" value="' + current.returnPoints + '"></div>' +
+      '<div style="padding:16px 14px;"><button class="btn btn-primary btn-block" data-save>保存</button></div>'
+    );
+    overlay.querySelector('[data-close]').onclick = () => closeOverlay(overlay);
+    overlay.querySelectorAll('[data-sp]').forEach((b) =>
+      b.addEventListener('click', () => {
+        closeOverlay(overlay);
+        onSave(parseInt(b.dataset.sp, 10), parseInt(b.dataset.rp, 10));
+      })
+    );
+    overlay.querySelector('[data-save]').onclick = () => {
+      const sp = parseInt(overlay.querySelector('#cc-start').value, 10);
+      const rp = parseInt(overlay.querySelector('#cc-return').value, 10);
+      if (isNaN(sp) || isNaN(rp)) return;
+      closeOverlay(overlay);
+      onSave(sp, rp);
+    };
+  }
+
   function numberEditDialog(label, current, onSave) {
     const overlay = openSheet(
       '<div style="font-weight:800;font-size:16px;margin-bottom:10px;">' + label + '</div>' +
@@ -3113,53 +4777,119 @@ const ui = (function () {
     }
     const acts = {
       length: () => selectDialog('対局の長さ', [['tonpu', '東風戦'], ['hanchan', '半荘戦'], ['iichan', '一荘戦']], r.length, (v) => { r.length = v; save(); }),
-      extension: () => {
-        r.extension.enabled = !r.extension.enabled;
-        save();
-      },
       bustEnd: () => { r.bustEnd = !r.bustEnd; save(); },
-      startPoints: () => numberEditDialog('最初の持ち点', r.startPoints, (v) => { r.startPoints = v; save(); }),
-      returnPoints: () => numberEditDialog('返す点数', r.returnPoints, (v) => { r.returnPoints = v; save(); }),
-      notenPenaltyTotal: () => numberEditDialog('ノーテン罰符の総点', r.notenPenaltyTotal, (v) => { r.notenPenaltyTotal = v; save(); }),
-      honbaValue: () => numberEditDialog('本場あたり加算点', r.honbaValue, (v) => { r.honbaValue = v; save(); }),
+      startPoints: () => startReturnPointsDialog(r, (sp, rp) => { r.startPoints = sp; r.returnPoints = rp; save(); }),
+      returnPoints: () => startReturnPointsDialog(r, (sp, rp) => { r.startPoints = sp; r.returnPoints = rp; save(); }),
+      notenPenaltyTotal: () =>
+        chipCustomDialog(
+          'ノーテン罰符の総点',
+          [3000, 2000, 1500, 1000, 0].map((v) => ({ value: v, label: fmtPts(v) })),
+          r.notenPenaltyTotal,
+          (v) => { r.notenPenaltyTotal = v; save(); },
+          { unit: '点' }
+        ),
+      honbaValue: () =>
+        chipCustomDialog(
+          '本場あたり加算点',
+          [300, 200, 100, 500, 1500].map((v) => ({ value: v, label: v + '点' })),
+          r.honbaValue,
+          (v) => { r.honbaValue = v; save(); },
+          { unit: '点' }
+        ),
       yakitori: () => {
-        r.yakitori.enabled = !r.yakitori.enabled;
-        save();
-      },
-      uma: () => {
         const overlay = openSheet(
-          '<div style="font-weight:800;font-size:16px;margin-bottom:10px;">ウマ(カンマ区切り)</div>' +
-          '<input class="txt" id="uma-edit" value="' + r.uma.join(',') + '">' +
-          '<div class="row" style="margin-top:14px;"><button class="btn btn-ghost" data-close>キャンセル</button><button class="btn btn-primary" data-ok>保存</button></div>',
-          { center: true }
+          '<div class="sheet-header"><span></span><h2>焼き鳥</h2><button data-close class="iconbtn">×</button></div>' +
+          '<div class="list-row"><div class="label">有効</div><div class="value"><button class="chip selected" data-yaki-toggle>' + (r.yakitori.enabled ? 'ON' : 'OFF') + '</button></div></div>' +
+          '<div class="list-row tap" data-yaki-pt><div class="label">ペナルティpt</div><div class="value">' + r.yakitori.penaltyPt + '<span class="chev">›</span></div></div>' +
+          '<div class="list-row tap" data-yaki-method><div class="label">授受方式</div><div class="value">' + { share: '山分け', perPlayer: '祝儀', topTake: 'トップ総取り' }[r.yakitori.method || 'share'] + '<span class="chev">›</span></div></div>'
         );
         overlay.querySelector('[data-close]').onclick = () => closeOverlay(overlay);
-        overlay.querySelector('[data-ok]').onclick = () => {
-          const arr = overlay.querySelector('#uma-edit').value.split(',').map((x) => parseFloat(x.trim())).filter((x) => !isNaN(x));
-          if (arr.length) {
-            r.uma = arr;
-            closeOverlay(overlay);
-            save();
-          }
+        overlay.querySelector('[data-yaki-toggle]').onclick = () => { r.yakitori.enabled = !r.yakitori.enabled; save(); closeOverlay(overlay); };
+        overlay.querySelector('[data-yaki-pt]').onclick = () => {
+          closeOverlay(overlay);
+          chipCustomDialog('焼き鳥pt', [10, 5, 20, 30].map((v) => ({ value: v, label: v + 'pt' })), r.yakitori.penaltyPt, (v) => { r.yakitori.penaltyPt = v; save(); }, { unit: 'pt' });
+        };
+        overlay.querySelector('[data-yaki-method]').onclick = () => {
+          closeOverlay(overlay);
+          selectDialog('焼き鳥の授受方式', [['share', '山分け'], ['perPlayer', '祝儀'], ['topTake', 'トップ総取り']], r.yakitori.method || 'share', (v) => { r.yakitori.method = v; save(); });
         };
       },
+      uma: () =>
+        chipCustomDialog(
+          'ウマ',
+          (mode === 'yonma'
+            ? [[10, 5, -5, -10], [20, 10, -10, -20], [30, 10, -10, -30], [30, 20, -20, -30], [0, 0, 0, 0]]
+            : [[15, -5, -10], [20, 0, -20], [10, 0, -10], [0, 0, 0]]
+          ).map((arr) => ({ value: arr, label: arr.join('/') })),
+          r.uma,
+          (v) => { r.uma = v; save(); }
+        ),
       rounding: () => selectDialog('端数処理', Object.entries(ROUNDING_LABEL), r.rounding, (v) => { r.rounding = v; save(); }),
-      bustBonus: () => { r.bustBonus.enabled = !r.bustBonus.enabled; save(); },
+      bustBonus: () => {
+        const overlay = openSheet(
+          '<div class="sheet-header"><span></span><h2>箱下ボーナス</h2><button data-close class="iconbtn">×</button></div>' +
+          '<div class="list-row"><div class="label">有効</div><div class="value"><button class="chip selected" data-bb-toggle>' + (r.bustBonus.enabled ? 'ON' : 'OFF') + '</button></div></div>' +
+          '<div class="list-row tap" data-bb-pt><div class="label">ボーナスpt</div><div class="value">' + r.bustBonus.pt + '<span class="chev">›</span></div></div>'
+        );
+        overlay.querySelector('[data-close]').onclick = () => closeOverlay(overlay);
+        overlay.querySelector('[data-bb-toggle]').onclick = () => { r.bustBonus.enabled = !r.bustBonus.enabled; save(); closeOverlay(overlay); };
+        overlay.querySelector('[data-bb-pt]').onclick = () => {
+          closeOverlay(overlay);
+          chipCustomDialog('箱下ボーナスpt', [10, 5, 20].map((v) => ({ value: v, label: v + 'pt' })), r.bustBonus.pt, (v) => { r.bustBonus.pt = v; save(); }, { unit: 'pt' });
+        };
+      },
       tieBreak: () => selectDialog('同点の時の順位', [['seatOrder', '上家が上位'], ['split', '同順位で山分け']], r.tieBreak, (v) => { r.tieBreak = v; save(); }),
       bet: () => {
-        if (!r.bet.enabled) numberEditDialog('レート(1pt=?円)', r.bet.ratePerPt, (v) => { r.bet.ratePerPt = v; r.bet.enabled = true; save(); });
-        else {
-          r.bet.enabled = false;
-          save();
-        }
+        chipCustomDialog(
+          '賭けレート(円/pt。0で無効)',
+          [
+            { value: 10, label: 'テンイチ (10円/pt)' },
+            { value: 30, label: 'テンサン (30円/pt)' },
+            { value: 50, label: 'テンゴ (50円/pt)' },
+            { value: 100, label: 'テンピン (100円/pt)' },
+          ],
+          r.bet.enabled ? r.bet.ratePerPt : 0,
+          (v) => { r.bet.enabled = v > 0; r.bet.ratePerPt = v > 0 ? v : r.bet.ratePerPt; save(); },
+          { unit: '円/pt' }
+        );
       },
-      chip: () => { r.chip.enabled = !r.chip.enabled; save(); },
+      chip: () => {
+        const overlay = openSheet(
+          '<div class="sheet-header"><span></span><h2>チップ設定</h2><button data-close class="iconbtn">×</button></div>' +
+          '<div class="list-row"><div class="label">有効</div><div class="value"><button class="chip selected" data-chip-toggle>' + (r.chip.enabled ? 'ON' : 'OFF') + '</button></div></div>' +
+          '<div class="list-row tap" data-chip-value><div class="label">1枚あたり円</div><div class="value">' + r.chip.valuePerChip + '円<span class="chev">›</span></div></div>' +
+          '<div class="list-row tap" data-chip-initial><div class="label">初期枚数</div><div class="value">' + r.chip.initial + '枚<span class="chev">›</span></div></div>'
+        );
+        overlay.querySelector('[data-close]').onclick = () => closeOverlay(overlay);
+        overlay.querySelector('[data-chip-toggle]').onclick = () => { r.chip.enabled = !r.chip.enabled; save(); closeOverlay(overlay); };
+        overlay.querySelector('[data-chip-value]').onclick = () => {
+          closeOverlay(overlay);
+          chipCustomDialog('チップ単価(円/枚)', [100, 200, 500, 1000].map((v) => ({ value: v, label: v + '円' })), r.chip.valuePerChip, (v) => { r.chip.valuePerChip = v; save(); }, { unit: '円' });
+        };
+        overlay.querySelector('[data-chip-initial]').onclick = () => {
+          closeOverlay(overlay);
+          numberEditDialog('初期枚数', r.chip.initial, (v) => { r.chip.initial = v; save(); });
+        };
+      },
       wareme: () => { r.wareme = !r.wareme; save(); },
       riichiUnderZero: () => { r.riichiUnderZero = !r.riichiUnderZero; save(); },
       dealerWinRotates: () => { r.dealerWinRotates = !r.dealerWinRotates; save(); },
       riichiStickReceiver: () => selectDialog('立直棒の受取者', [['atamahane', '頭ハネで獲得'], ['all', '全員が獲得']], r.riichiStickReceiver, (v) => { r.riichiStickReceiver = v; save(); }),
       kiriageMangan: () => { r.kiriageMangan = !r.kiriageMangan; save(); },
       tsumoLoss: () => { r.tsumoLoss = !r.tsumoLoss; save(); },
+      extension: () => {
+        const overlay = openSheet(
+          '<div class="sheet-header"><span></span><h2>延長戦(西・北入)</h2><button data-close class="iconbtn">×</button></div>' +
+          '<div class="list-row"><div class="label">有効</div><div class="value"><button class="chip selected" data-ext-toggle>' + (r.extension.enabled ? 'ON' : 'OFF') + '</button></div></div>' +
+          '<div class="list-row tap" data-ext-th><div class="label">規定点</div><div class="value">' + fmtPts(r.extension.threshold) + '<span class="chev">›</span></div></div>'
+        );
+        overlay.querySelector('[data-close]').onclick = () => closeOverlay(overlay);
+        overlay.querySelector('[data-ext-toggle]').onclick = () => { r.extension.enabled = !r.extension.enabled; save(); closeOverlay(overlay); };
+        overlay.querySelector('[data-ext-th]').onclick = () => {
+          closeOverlay(overlay);
+          chipCustomDialog('延長戦規定点', [30000, 25000].map((v) => ({ value: v, label: fmtPts(v) })), r.extension.threshold, (v) => { r.extension.threshold = v; save(); }, { unit: '点' });
+        };
+      },
     };
     Object.keys(acts).forEach((k) => {
       const el = $app.querySelector('[data-act="' + k + '"]');
@@ -3211,7 +4941,8 @@ const ui = (function () {
       '<div class="section-title">データ</div><div class="card">' +
       '<div class="list-row tap" data-act="aggregate"><div class="label">集計</div><span class="chev">›</span></div>' +
       '<div class="list-row tap" data-act="import"><div class="label">対局データをインポート</div><span class="chev">›</span></div>' +
-      '<div class="list-row tap" data-act="export"><div class="label">対局データを送信(エクスポート)</div><span class="chev">›</span></div>' +
+      '<div class="list-row tap" data-act="export"><div class="label">対局データを送信(JSON / QR・URL)</div><span class="chev">›</span></div>' +
+      '<div class="list-row tap" data-act="share-history"><div class="label">共有履歴</div><span class="chev">›</span></div>' +
       '<div class="list-row tap" data-act="merge"><div class="label">プレイヤーのマージ</div><span class="chev">›</span></div>' +
       '</div>' +
       '<div class="section-title">スプレッドシート連携</div><div class="card">' +
@@ -3226,6 +4957,8 @@ const ui = (function () {
       '<div class="list-row"><div class="label">最終同期</div><div class="value">' + (cfg.lastSyncAt ? fmtDateTime(cfg.lastSyncAt) : '未同期') + '</div></div>' +
       '</div>' +
       '<div class="section-title">アプリ</div><div class="card">' +
+      '<div class="list-row"><div class="label">音声読み上げ</div><div class="value"><button class="chip selected" data-toggle="voiceEnabled">' + (appSettings().voiceEnabled ? 'ON' : 'OFF') + '</button></div></div>' +
+      '<div class="list-row"><div class="label">入力画面の回転</div><div class="value"><button class="chip selected" data-toggle="rotateSheets">' + (appSettings().rotateSheets ? 'ON' : 'OFF') + '</button></div></div>' +
       '<div class="list-row"><div class="label">言語</div><div class="value">日本語</div></div>' +
       '<div class="list-row"><div class="label">バージョン</div><div class="value">v' + APP_VERSION + '</div></div>' +
       '<div class="list-row"><div class="label">仕様書バージョン</div><div class="value">v' + SPEC_VERSION + '(' + BUILD_DATE + ')</div></div>' +
@@ -3240,8 +4973,17 @@ const ui = (function () {
     const q = (s) => $app.querySelector(s);
     q('[data-act="aggregate"]').onclick = () => toast('集計画面は今後のアップデートで追加予定です');
     q('[data-act="import"]').onclick = () => importJsonFlow();
-    q('[data-act="export"]').onclick = () => exportGamesAsJson(storage.getGames());
+    q('[data-act="export"]').onclick = () => openShareActionSheet(storage.getGames().filter((g) => g.status === 'finished' && !g.deleted));
+    q('[data-act="share-history"]').onclick = () => openShareHistoryModal();
     q('[data-act="merge"]').onclick = () => openMergeFlow();
+    $app.querySelectorAll('[data-toggle]').forEach((b) =>
+      b.addEventListener('click', () => {
+        const key = b.dataset.toggle;
+        const cur = appSettings()[key];
+        setAppSetting(key, !cur);
+        b.textContent = !cur ? 'ON' : 'OFF';
+      })
+    );
     q('[data-act="save-sync"]').onclick = async () => {
       const cfg = storage.getSyncConfig();
       cfg.url = q('#gas-url').value.trim();
@@ -3303,7 +5045,7 @@ const ui = (function () {
   }
 
   function exportGamesAsJson(games) {
-    const data = { schemaVersion: 1, exportedAt: Date.now(), games, players: storage.getPlayers() };
+    const data = { schemaVersion: 1, exportedAt: Date.now(), games, players: storage.getPlayers(), sessions: storage.getSessions() };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -3313,9 +5055,70 @@ const ui = (function () {
     a.click();
     a.remove();
     const logs = storage.getShareLogs();
-    logs.push({ id: engine.uid(), direction: 'export', at: Date.now(), gameIds: games.map((g) => g.id) });
+    logs.push({ id: engine.uid(), direction: 'export', method: 'json', at: Date.now(), gameIds: games.map((g) => g.id) });
     storage.setShareLogs(logs);
     toast('エクスポートしました');
+  }
+
+  // ---- v2.0: JSON/QR/URLインポート共通のマージロジック(10章・6.12.5) ----
+  // ID一致で既存とみなし、updatedAtが新しければ上書き。プレイヤーは名前一致で紐付け。
+  function mergeGamesAndPlayers(gamesIn, playersIn, sessionsIn) {
+    const existing = storage.getGames();
+    const idxById = {};
+    existing.forEach((g, i) => (idxById[g.id] = i));
+    let added = 0, updated = 0;
+    const touched = [];
+    (gamesIn || []).forEach((g) => {
+      const idx = idxById[g.id];
+      if (idx == null) {
+        existing.push(g);
+        idxById[g.id] = existing.length - 1;
+        added++;
+        touched.push(g);
+      } else if ((existing[idx].updatedAt || 0) < (g.updatedAt || 0)) {
+        existing[idx] = g;
+        updated++;
+        touched.push(g);
+      }
+    });
+    storage.setGames(existing);
+    const existingPlayers = storage.getPlayers();
+    const byName = new Map(existingPlayers.map((p) => [p.name, p]));
+    let playersAdded = 0;
+    (playersIn || []).forEach((p) => {
+      if (!byName.has(p.name)) {
+        existingPlayers.push(p);
+        playersAdded++;
+      }
+    });
+    storage.setPlayers(existingPlayers);
+    S.players = existingPlayers;
+    // v2.1(6.15.5): 会も同一ロジックでマージ(ID一致・updatedAtが新しければ上書き)
+    let sessionsTouched = 0;
+    if (sessionsIn && sessionsIn.length) {
+      const existingSessions = storage.getSessions();
+      const sIdx = {};
+      existingSessions.forEach((s, i) => (sIdx[s.id] = i));
+      sessionsIn.forEach((s) => {
+        const idx = sIdx[s.id];
+        if (idx == null) {
+          existingSessions.push(s);
+          sIdx[s.id] = existingSessions.length - 1;
+          sessionsTouched++;
+        } else if ((existingSessions[idx].updatedAt || 0) < (s.updatedAt || 0)) {
+          existingSessions[idx] = s;
+          sessionsTouched++;
+        }
+      });
+      storage.setSessions(existingSessions);
+      if (sessionsTouched && sync.isConfigured()) sync.queueSessionSave(sessionsIn);
+    }
+    // v2.0(6.12.5): 受信データも通常の同期キューへ積む(同期設定済み端末ならシートにも反映)
+    if (touched.length && sync.isConfigured()) {
+      sync.queueGameSave(touched);
+      sync.flushQueue();
+    }
+    return { added, updated, playersAdded, sessionsTouched };
   }
 
   function importJsonFlow() {
@@ -3329,27 +5132,11 @@ const ui = (function () {
       reader.onload = () => {
         try {
           const data = JSON.parse(reader.result);
-          const existing = storage.getGames();
-          const existingIds = new Set(existing.map((g) => g.id));
-          let added = 0;
-          (data.games || []).forEach((g) => {
-            if (!existingIds.has(g.id)) {
-              existing.push(g);
-              added++;
-            }
-          });
-          storage.setGames(existing);
-          const existingPlayers = storage.getPlayers();
-          const byName = new Set(existingPlayers.map((p) => p.name));
-          (data.players || []).forEach((p) => {
-            if (!byName.has(p.name)) existingPlayers.push(p);
-          });
-          storage.setPlayers(existingPlayers);
-          S.players = existingPlayers;
+          const r = mergeGamesAndPlayers(data.games || [], data.players || [], data.sessions || []);
           const logs = storage.getShareLogs();
-          logs.push({ id: engine.uid(), direction: 'import', at: Date.now(), gameIds: (data.games || []).map((g) => g.id) });
+          logs.push({ id: engine.uid(), direction: 'import', method: 'json', at: Date.now(), gameIds: (data.games || []).map((g) => g.id) });
           storage.setShareLogs(logs);
-          toast(added + '件の対局をインポートしました');
+          toast((r.added + r.updated) + '件の対局をインポートしました');
           render();
         } catch (e) {
           toast('インポートに失敗しました: ファイル形式を確認してください');
@@ -3358,6 +5145,313 @@ const ui = (function () {
       reader.readAsText(file);
     };
     input.click();
+  }
+
+  // =================================================================
+  // v2.0: F-31 結果共有画像(6.11)
+  // =================================================================
+  function roundRectPath(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+  function truncateText(ctx, text, maxWidth) {
+    if (ctx.measureText(text).width <= maxWidth) return text;
+    let t = text;
+    while (t.length > 1 && ctx.measureText(t + '…').width > maxWidth) t = t.slice(0, -1);
+    return t + '…';
+  }
+  function buildResultImageCanvas(game) {
+    const W = 1080, H = 1350;
+    const canvas = document.createElement('canvas');
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext('2d');
+    const grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, '#3d9440');
+    grad.addColorStop(1, '#1f5322');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    const modeLabel = { yonma: '4人麻雀', sanma: '3人麻雀', yonin_sanma: '4人3麻' }[game.mode] || game.mode;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(255,255,255,.85)';
+    ctx.font = '600 30px sans-serif';
+    ctx.fillText('雀点', W / 2, 78);
+    ctx.fillStyle = '#fff';
+    ctx.font = '800 58px sans-serif';
+    ctx.fillText('対局結果', W / 2, 150);
+    ctx.font = '600 30px sans-serif';
+    ctx.fillText(modeLabel, W / 2, 196);
+    ctx.font = '400 25px sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,.85)';
+    const dateStr = fmtDateTime(game.startedAt) + ' 開始' + (game.durationMin != null ? ' ・ 所要' + game.durationMin + '分' : '') + ' ・ MF' + game.serialNo;
+    ctx.fillText(dateStr, W / 2, 236);
+
+    const ranked = [...game.result].sort((a, b) => a.rank - b.rank);
+    const cardX = 56, cardY = 280, cardW = W - 112, rowH = 150;
+    const cardH = ranked.length * rowH + 30;
+    ctx.fillStyle = '#ffffff';
+    roundRectPath(ctx, cardX, cardY, cardW, cardH, 26);
+    ctx.fill();
+
+    const rankColors = ['#e8c04c', '#b9bcc4', '#c98a4b', '#8a8a8e'];
+    ranked.forEach((r, i) => {
+      const y = cardY + 20 + i * rowH;
+      ctx.fillStyle = rankColors[i] || '#8a8a8e';
+      ctx.beginPath();
+      ctx.arc(cardX + 76, y + 60, 36, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.font = '800 34px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(String(r.rank), cardX + 76, y + 73);
+
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#1c1c1e';
+      ctx.font = '700 40px sans-serif';
+      const nm = truncateText(ctx, playerName(r.playerId) + (r.yakitori ? ' 🐤' : ''), cardW - 340);
+      ctx.fillText(nm, cardX + 140, y + 45);
+
+      ctx.font = '400 24px sans-serif';
+      ctx.fillStyle = '#8a8a8e';
+      ctx.fillText('最終 ' + fmtPts(r.finalPoints) + '点', cardX + 140, y + 80);
+      ctx.font = '400 21px sans-serif';
+      const breakdown = '素点' + fmtPt(r.rawPt) + ' ウマ' + fmtPt(r.umaPt) + (r.okaPt ? ' オカ' + fmtPt(r.okaPt) : '');
+      ctx.fillText(breakdown, cardX + 140, y + 110);
+
+      ctx.textAlign = 'right';
+      ctx.font = '800 56px sans-serif';
+      ctx.fillStyle = r.totalPt >= 0 ? '#2e6bd1' : '#d64545';
+      ctx.fillText(fmtPt(r.totalPt), cardX + cardW - 28, y + 55);
+
+      ctx.font = '500 26px sans-serif';
+      if (game.venue) {
+        const vs = (game.venue.settlements || []).find((s) => s.seat === r.seat);
+        if (vs) {
+          ctx.fillStyle = vs.finalYen >= 0 ? '#2e6bd1' : '#d64545';
+          ctx.fillText((vs.finalYen >= 0 ? '+' : '') + vs.finalYen.toLocaleString() + '円', cardX + cardW - 28, y + 100);
+        }
+      } else if (r.yen != null) {
+        ctx.fillStyle = '#555';
+        ctx.fillText((r.yen >= 0 ? '+' : '') + r.yen.toLocaleString() + '円', cardX + cardW - 28, y + 100);
+      }
+      ctx.textAlign = 'left';
+      if (i < ranked.length - 1) {
+        ctx.strokeStyle = '#eee';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(cardX + 20, y + rowH - 10);
+        ctx.lineTo(cardX + cardW - 20, y + rowH - 10);
+        ctx.stroke();
+      }
+    });
+
+    let footerY = cardY + cardH + 60;
+    ctx.textAlign = 'center';
+    if (game.venue) {
+      const methodLabel = { equal: '均等割り', weighted: '傾斜', topExempt: 'トップ免除' }[game.venue.method] || game.venue.method;
+      ctx.fillStyle = '#fff';
+      ctx.font = '600 30px sans-serif';
+      ctx.fillText('場代 ¥' + game.venue.totalYen.toLocaleString() + '(' + methodLabel + ')', W / 2, footerY);
+      footerY += 46;
+    }
+    ctx.font = '400 22px sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,.75)';
+    ctx.fillText('Recorded with 雀点', W / 2, H - 58);
+    ctx.font = '400 18px sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,.55)';
+    ctx.fillText(fmtDateTime(Date.now()) + ' 生成', W / 2, H - 30);
+    return canvas;
+  }
+
+  function logShare(direction, method, gameIds) {
+    const logs = storage.getShareLogs();
+    logs.push({ id: engine.uid(), direction, method, at: Date.now(), gameIds });
+    storage.setShareLogs(logs);
+  }
+
+  function openImagePreview(game) {
+    const canvas = buildResultImageCanvas(game);
+    const dataUrl = canvas.toDataURL('image/png');
+    const canShareFile = !!(navigator.canShare);
+    const overlay = openSheet(
+      '<div class="sheet-header"><button data-close class="iconbtn">×</button><h2>画像で共有</h2><span></span></div>' +
+      '<div style="padding:0 14px;"><img class="share-preview-img" src="' + dataUrl + '"></div>' +
+      '<div style="padding:16px 14px;"><button class="btn btn-primary btn-block" data-share-btn>' + (canShareFile ? '共有' : '画像を保存') + '</button></div>',
+      { full: true }
+    );
+    overlay.querySelector('[data-close]').onclick = () => closeOverlay(overlay);
+    overlay.querySelector('[data-share-btn]').onclick = () => {
+      canvas.toBlob((blob) => {
+        if (!blob) return;
+        const file = new File([blob], 'mahjong_result_' + (game.serialNo || '') + '_' + Date.now() + '.png', { type: 'image/png' });
+        if (canShareFile && navigator.canShare({ files: [file] })) {
+          navigator
+            .share({ files: [file], title: '対局結果' })
+            .then(() => logShare('export', 'image', [game.id]))
+            .catch((e) => {
+              if (e && e.name !== 'AbortError') toast('共有に失敗しました');
+            });
+        } else {
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = file.name;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          logShare('export', 'image', [game.id]);
+          toast('画像を保存しました');
+        }
+      }, 'image/png');
+    };
+  }
+
+  // ---- v2.0: 6.7 共有アクションシート(F-31/F-32統合) ----
+  function openShareActionSheet(gameOrGames) {
+    const games = Array.isArray(gameOrGames) ? gameOrGames : [gameOrGames];
+    const rows = [];
+    if (games.length === 1) rows.push('<button class="list-row tap" data-share="image"><div class="label">🖼 画像で共有</div><span class="chev">›</span></button>');
+    rows.push('<button class="list-row tap" data-share="json"><div class="label">📄 JSONファイルで送信</div><span class="chev">›</span></button>');
+    rows.push('<button class="list-row tap" data-share="url"><div class="label">🔗 QR/URLで共有</div><span class="chev">›</span></button>');
+    const overlay = openSheet(
+      '<div class="sheet-header"><span></span><h2>共有</h2><button data-close class="iconbtn">×</button></div>' +
+      '<div class="share-action-row card" style="margin-top:8px;">' + rows.join('') + '</div>',
+      { center: true }
+    );
+    overlay.querySelector('[data-close]').onclick = () => closeOverlay(overlay);
+    const imgBtn = overlay.querySelector('[data-share="image"]');
+    if (imgBtn) imgBtn.onclick = () => { closeOverlay(overlay); openImagePreview(games[0]); };
+    overlay.querySelector('[data-share="json"]').onclick = () => { closeOverlay(overlay); exportGamesAsJson(games); };
+    overlay.querySelector('[data-share="url"]').onclick = () => { closeOverlay(overlay); openDataShareModal(games); };
+  }
+
+  // =================================================================
+  // v2.0: F-32 QR/URLデータ共有(6.12)
+  // =================================================================
+  function buildImportUrl(encoded) {
+    return location.origin + location.pathname + '#import=' + encoded;
+  }
+  function renderQrSvg(text) {
+    if (typeof qrcode === 'undefined') return '';
+    const qr = qrcode(0, 'M');
+    qr.addData(text);
+    qr.make();
+    return qr.createSvgTag({ scalable: true });
+  }
+  async function openDataShareModal(games) {
+    const overlay = openSheet(
+      '<div class="sheet-header"><button data-close class="iconbtn">×</button><h2>QR/URLで共有</h2><span></span></div>' +
+      '<div class="hint" id="ds-status">生成中...</div>',
+      { full: true }
+    );
+    overlay.querySelector('[data-close]').onclick = () => closeOverlay(overlay);
+    try {
+      const gamesNoDeleted = games.filter((g) => !g.deleted);
+      const playerIds = new Set();
+      gamesNoDeleted.forEach((g) => g.seats.forEach((s) => playerIds.add(s.playerId)));
+      const players = storage.getPlayers().filter((p) => playerIds.has(p.id));
+      const sessionIds = new Set(gamesNoDeleted.map((g) => g.sessionId).filter(Boolean));
+      const sessions = storage.getSessions().filter((s) => sessionIds.has(s.id));
+      const payload = { v: 1, games: gamesNoDeleted, players, sessions: sessions.length ? sessions : undefined };
+      const encoded = await share.encodePayload(payload);
+      const url = buildImportUrl(encoded);
+      const sizeBytes = encoded.length;
+      if (url.length > 30000) {
+        overlay.querySelector('.sheet').innerHTML =
+          '<div class="sheet-header"><button data-close class="iconbtn">×</button><h2>QR/URLで共有</h2><span></span></div>' +
+          '<div class="hint" style="color:var(--red);padding:20px;">URLが30,000文字を超えるため生成できません。件数を減らすか、JSONファイル送信をご利用ください。</div>';
+        overlay.querySelector('[data-close]').onclick = () => closeOverlay(overlay);
+        return;
+      }
+      const qrHtml = sizeBytes <= 2000
+        ? '<div class="qr-wrap">' + renderQrSvg(url) + '</div>'
+        : '<div class="hint" style="padding:14px;">データが大きいためQRは表示できません。リンクコピーをご利用ください。</div>';
+      const summaryTxt = '対局' + gamesNoDeleted.length + '件・プレイヤー' + players.length + '名(約' + (sizeBytes / 1024).toFixed(1) + 'KB)';
+      overlay.querySelector('.sheet').innerHTML =
+        '<div class="sheet-header"><button data-close class="iconbtn">×</button><h2>QR/URLで共有</h2><span></span></div>' +
+        '<div class="hint" style="text-align:center;">' + summaryTxt + '</div>' +
+        qrHtml +
+        '<div class="share-url-box" id="ds-url">' + url + '</div>' +
+        '<div class="hint" style="text-align:center;">相手がこのリンクを開くと、このアプリに対局データが取り込まれます</div>' +
+        '<div style="padding:16px 14px;"><button class="btn btn-primary btn-block" data-copy>リンクをコピー</button></div>';
+      overlay.querySelector('[data-close]').onclick = () => closeOverlay(overlay);
+      overlay.querySelector('[data-copy]').onclick = () => {
+        if (navigator.clipboard) {
+          navigator.clipboard.writeText(url).then(() => toast('コピーしました')).catch(() => toast('コピーできませんでした'));
+        } else {
+          toast('コピーできませんでした。手動で選択してください');
+        }
+        logShare('export', 'url', gamesNoDeleted.map((g) => g.id));
+      };
+    } catch (e) {
+      overlay.querySelector('#ds-status').textContent = 'このブラウザではQR/URL共有を生成できません: ' + (e && e.message ? e.message : e);
+    }
+  }
+
+  // ---- v2.0: 6.12.5 受信側フロー ----
+  function openImportConfirm(payload) {
+    const games = payload.games || [];
+    const rows = games
+      .map((g) => {
+        const ranked = [...(g.result || [])].sort((a, b) => a.rank - b.rank);
+        const top = ranked[0];
+        const modeLabel = { yonma: '4人麻雀', sanma: '3人麻雀', yonin_sanma: '4人3麻' }[g.mode] || g.mode;
+        return '<div class="list-row"><div class="label">' + fmtDateTime(g.startedAt) + ' ・ ' + modeLabel + '</div><div class="value">' + (top ? (top.name || '') + ' +' + fmtPt(top.totalPt).replace('+', '') : '') + '</div></div>';
+      })
+      .join('');
+    const overlay = openSheet(
+      '<div class="sheet-header"><span></span><h2>データを受信しました</h2><span></span></div>' +
+      '<div class="hint" style="text-align:center;">対局' + games.length + '件・プレイヤー' + (payload.players || []).length + '名を受け取りました</div>' +
+      '<div class="card" style="margin-top:8px;">' + (rows || '<div class="list-row"><div class="label" style="color:var(--sub);">対局データがありません</div></div>') + '</div>' +
+      '<div style="padding:16px 14px;display:flex;gap:10px;"><button class="btn btn-ghost btn-block" data-cancel>キャンセル</button><button class="btn btn-primary btn-block" data-import>取り込む</button></div>',
+      { center: true }
+    );
+    overlay.querySelector('[data-cancel]').onclick = () => closeOverlay(overlay);
+    overlay.querySelector('[data-import]').onclick = () => {
+      const r = mergeGamesAndPlayers(payload.games || [], payload.players || [], payload.sessions || []);
+      logShare('import', 'url', (payload.games || []).map((g) => g.id));
+      closeOverlay(overlay);
+      toast((r.added + r.updated) + '件の対局を取り込みました');
+      render();
+    };
+  }
+
+  async function consumeImportLink() {
+    const h = location.hash;
+    if (h.indexOf('#import=') !== 0) return;
+    const encoded = h.slice('#import='.length);
+    history.replaceState(null, '', location.pathname + location.search);
+    try {
+      const payload = await share.decodePayload(encoded);
+      if (!payload || !Array.isArray(payload.games)) throw new Error('invalid_schema');
+      openImportConfirm(payload);
+    } catch (e) {
+      toast('共有リンクを読み取れませんでした');
+    }
+  }
+
+  // ---- v2.0: 6.12.7 共有履歴一覧 ----
+  function openShareHistoryModal() {
+    const logs = [...storage.getShareLogs()].sort((a, b) => b.at - a.at);
+    const iconOf = { json: '📄', url: '🔗', image: '🖼' };
+    const rows = logs
+      .map((l) => {
+        const icon = iconOf[l.method] || '📄';
+        const dir = l.direction === 'export' ? '送信' : '受信';
+        return '<div class="list-row"><div class="label">' + icon + ' ' + dir + ' ・ ' + (l.gameIds || []).length + '件</div><div class="value">' + fmtDateTime(l.at) + '</div></div>';
+      })
+      .join('');
+    const overlay = openSheet(
+      '<div class="sheet-header"><span></span><h2>共有履歴</h2><button data-close class="iconbtn">×</button></div>' +
+      '<div class="card" style="margin-top:8px;">' + (rows || '<div class="list-row"><div class="label" style="color:var(--sub);">履歴がありません</div></div>') + '</div>',
+      { full: true }
+    );
+    overlay.querySelector('[data-close]').onclick = () => closeOverlay(overlay);
   }
 
   function openMergeFlow() {
@@ -3474,6 +5568,7 @@ const ui = (function () {
     consumeSetupLink();
     applyDefaultSyncConfig();
     render();
+    consumeImportLink();
     if (sync.isConfigured()) {
       sync.pullAndMerge().then((res) => {
         if (res && res.ok && (res.merged || res.mergedPlayers)) {
@@ -3496,11 +5591,14 @@ const selftest = (function () {
     return Math.abs(a - b) < (eps || 0.0001);
   }
 
-  function run() {
+  async function run() {
     const results = [];
     function check(name, actual, expected) {
       const ok = approxEq(actual, expected);
       results.push({ name, actual, expected, ok });
+    }
+    function checkBool(name, cond) {
+      results.push({ name, actual: cond, expected: true, ok: !!cond });
     }
 
     // TC-1
@@ -3571,11 +5669,383 @@ const selftest = (function () {
       check('TC-6 ノーテン3 -1000', result[3], -1000);
     }
 
+    // TC-7 (F-34 場代精算。8.7章)
+    {
+      // TC-7-1: 均等割り・割り切れ
+      {
+        const seatsByRank = [0, 1, 2, 3];
+        const betYen = { 0: 2600, 1: 200, 2: -700, 3: -2100 };
+        const s = domain.venueSettlement(3000, 'equal', null, seatsByRank, betYen);
+        const bySeat = Object.fromEntries(s.map((x) => [x.seat, x]));
+        check('TC-7-1 負担額(各750)', bySeat[0].burdenYen, 750);
+        check('TC-7-1 最終収支(1位+1850)', bySeat[0].finalYen, 1850);
+        check('TC-7-1 最終収支(2位-550)', bySeat[1].finalYen, -550);
+        check('TC-7-1 最終収支(3位-1450)', bySeat[2].finalYen, -1450);
+        check('TC-7-1 最終収支(4位-2850)', bySeat[3].finalYen, -2850);
+        check('TC-7-1 合計-3000', s.reduce((a, x) => a + x.finalYen, 0), -3000);
+      }
+      // TC-7-2: 均等割り・端数(3人)
+      {
+        const s = domain.venueSettlement(1000, 'equal', null, [0, 1, 2], { 0: 0, 1: 0, 2: 0 });
+        check('TC-7-2 負担(1位330)', s[0].burdenYen, 330);
+        check('TC-7-2 負担(2位330)', s[1].burdenYen, 330);
+        check('TC-7-2 負担(3位340)', s[2].burdenYen, 340);
+        check('TC-7-2 合計1000', s.reduce((a, x) => a + x.burdenYen, 0), 1000);
+      }
+      // TC-7-3: 傾斜10/20/30/40
+      {
+        const s = domain.venueSettlement(2000, 'weighted', [10, 20, 30, 40], [0, 1, 2, 3], {});
+        check('TC-7-3 負担(200)', s[0].burdenYen, 200);
+        check('TC-7-3 負担(400)', s[1].burdenYen, 400);
+        check('TC-7-3 負担(600)', s[2].burdenYen, 600);
+        check('TC-7-3 負担(800)', s[3].burdenYen, 800);
+      }
+      // TC-7-4: トップ免除
+      {
+        const s = domain.venueSettlement(3000, 'topExempt', null, [0, 1, 2, 3], {});
+        check('TC-7-4 1位免除(0)', s[0].burdenYen, 0);
+        check('TC-7-4 他は1000ずつ', s[1].burdenYen, 1000);
+        check('TC-7-4 他は1000ずつ(2)', s[2].burdenYen, 1000);
+        check('TC-7-4 他は1000ずつ(3)', s[3].burdenYen, 1000);
+      }
+      // TC-7-5: 立替者=2位(TC-7-1の値)
+      {
+        const seatsByRank = [0, 1, 2, 3];
+        const betYen = { 0: 2600, 1: 200, 2: -700, 3: -2100 };
+        const s = domain.venueSettlement(3000, 'equal', null, seatsByRank, betYen);
+        const transfers = domain.venueTransfers(s, 1);
+        const t01 = transfers.find((t) => t.from === 1 && t.to === 0);
+        const t21 = transfers.find((t) => t.from === 2 && t.to === 1);
+        const t31 = transfers.find((t) => t.from === 3 && t.to === 1);
+        check('TC-7-5 2位→1位1850円', t01 ? t01.amount : NaN, 1850);
+        check('TC-7-5 3位→2位1450円', t21 ? t21.amount : NaN, 1450);
+        check('TC-7-5 4位→2位2850円', t31 ? t31.amount : NaN, 2850);
+        checkBool('TC-7-5 送金件数3件', transfers.length === 3);
+      }
+      // TC-7-6: 賭け無効
+      {
+        const s = domain.venueSettlement(4000, 'equal', null, [0, 1, 2, 3], {});
+        check('TC-7-6 賭け無効時 各-1000', s[0].finalYen, -1000);
+      }
+    }
+
+    // TC-8 (F-33 統計。8.7章)
+    {
+      const baseRules = storage.defaultRules('yonma');
+      // TC-8-1: 参加局数・和了率・放銃率・リーチ相殺
+      const g1 = {
+        id: 'tc8-1', mode: 'yonma', rules: baseRules,
+        seats: [{ playerId: 'PA' }, { playerId: 'PB' }, { playerId: 'PC' }, { playerId: 'PD' }],
+        events: [
+          { type: 'WIN', winners: [{ seat: 0, directPoints: 3900 }], method: 'ron', loserSeat: 1 },
+          { type: 'RIICHI', seat: 2 },
+          { type: 'RIICHI_CANCEL', seat: 2 },
+          { type: 'RIICHI', seat: 2 },
+          { type: 'WIN', winners: [{ seat: 2, han: 2, fu: 30 }], method: 'tsumo' },
+          { type: 'DRAW', tenpaiSeats: [0] },
+        ],
+        status: 'finished',
+        startedAt: Date.now() - 1000,
+        endedAt: Date.now(),
+        result: [
+          { seat: 0, playerId: 'PA', rank: 1, totalPt: 10, yen: 0 },
+          { seat: 1, playerId: 'PB', rank: 2, totalPt: 0, yen: 0 },
+          { seat: 2, playerId: 'PC', rank: 3, totalPt: -5, yen: 0 },
+          { seat: 3, playerId: 'PD', rank: 4, totalPt: -5, yen: 0 },
+        ],
+      };
+      const styA = stats.styleMetrics([g1], 'PA');
+      const styB = stats.styleMetrics([g1], 'PB');
+      const styC = stats.styleMetrics([g1], 'PC');
+      check('TC-8-1 Aの参加局数3', styA.totalKyoku, 3);
+      check('TC-8-1 Aの和了率(1/3)', styA.winRate, 1 / 3);
+      check('TC-8-1 Bの放銃率(1/3)', styB.dealRate, 1 / 3);
+      check('TC-8-1 Cのリーチ率(CANCEL相殺後1/3)', styC.riichiRate, 1 / 3);
+
+      // TC-8-2: 平均打点に本場・供託を含まない
+      const g2 = {
+        id: 'tc8-2', mode: 'yonma', rules: baseRules,
+        seats: [{ playerId: 'PA' }, { playerId: 'PB' }, { playerId: 'PC' }, { playerId: 'PD' }],
+        events: [
+          { type: 'DRAW', tenpaiSeats: [0, 1, 2, 3] },
+          { type: 'DRAW', tenpaiSeats: [0, 1, 2, 3] },
+          { type: 'RIICHI', seat: 2 },
+          { type: 'RIICHI', seat: 3 },
+          { type: 'WIN', winners: [{ seat: 1, directPoints: 3900 }], method: 'ron', loserSeat: 0 },
+        ],
+        status: 'finished', startedAt: Date.now() - 1000, endedAt: Date.now(),
+        result: [
+          { seat: 0, playerId: 'PA', rank: 4, totalPt: -10, yen: 0 },
+          { seat: 1, playerId: 'PB', rank: 1, totalPt: 10, yen: 0 },
+          { seat: 2, playerId: 'PC', rank: 2, totalPt: 0, yen: 0 },
+          { seat: 3, playerId: 'PD', rank: 3, totalPt: 0, yen: 0 },
+        ],
+      };
+      const evStatsB = stats.computeEventStats(g2, 1);
+      check('TC-8-2 平均打点に本場供託を含まない(3900)', evStatsB.sumWinPoints, 3900);
+
+      // TC-8-3: ダブロン
+      const g3 = {
+        id: 'tc8-3', mode: 'yonma', rules: baseRules,
+        seats: [{ playerId: 'PA' }, { playerId: 'PB' }, { playerId: 'PC' }, { playerId: 'PD' }],
+        events: [{ type: 'WIN', winners: [{ seat: 0, directPoints: 2000 }, { seat: 1, directPoints: 1000 }], method: 'ron', loserSeat: 2 }],
+        status: 'finished', startedAt: Date.now() - 1000, endedAt: Date.now(),
+        result: [
+          { seat: 0, playerId: 'PA', rank: 1, totalPt: 5, yen: 0 },
+          { seat: 1, playerId: 'PB', rank: 2, totalPt: 3, yen: 0 },
+          { seat: 2, playerId: 'PC', rank: 4, totalPt: -10, yen: 0 },
+          { seat: 3, playerId: 'PD', rank: 3, totalPt: 2, yen: 0 },
+        ],
+      };
+      const evA3 = stats.computeEventStats(g3, 0);
+      const evB3 = stats.computeEventStats(g3, 1);
+      const evC3 = stats.computeEventStats(g3, 2);
+      check('TC-8-3 ダブロンAの和了+1', evA3.wins, 1);
+      check('TC-8-3 ダブロンBの和了+1', evB3.wins, 1);
+      check('TC-8-3 放銃者の放銃は1のみ', evC3.deals, 1);
+
+      // TC-8-4: チョンボ局は参加局数に数えない
+      const g4 = {
+        id: 'tc8-4', mode: 'yonma', rules: baseRules,
+        seats: [{ playerId: 'PA' }, { playerId: 'PB' }, { playerId: 'PC' }, { playerId: 'PD' }],
+        events: [{ type: 'CHOMBO', seat: 1, penalty: 'mangan' }],
+        status: 'finished', startedAt: Date.now() - 1000, endedAt: Date.now(),
+        result: [
+          { seat: 0, playerId: 'PA', rank: 1, totalPt: 5, yen: 0 },
+          { seat: 1, playerId: 'PB', rank: 4, totalPt: -15, yen: 0 },
+          { seat: 2, playerId: 'PC', rank: 2, totalPt: 5, yen: 0 },
+          { seat: 3, playerId: 'PD', rank: 3, totalPt: 5, yen: 0 },
+        ],
+      };
+      const evB4 = stats.computeEventStats(g4, 1);
+      check('TC-8-4 チョンボ局は参加局数0', evB4.participatedKyoku, 0);
+      check('TC-8-4 チョンボ回数1', evB4.chombo, 1);
+
+      // TC-8-5: resultのみ(eventsなし)の対局混在
+      const g5 = {
+        id: 'tc8-5', mode: 'yonma', rules: baseRules,
+        seats: [{ playerId: 'PA' }, { playerId: 'PB' }, { playerId: 'PC' }, { playerId: 'PD' }],
+        events: [],
+        status: 'finished', startedAt: Date.now() - 1000, endedAt: Date.now(),
+        result: [
+          { seat: 0, playerId: 'PA', rank: 2, totalPt: 3, yen: 0 },
+          { seat: 1, playerId: 'PB', rank: 1, totalPt: 8, yen: 0 },
+          { seat: 2, playerId: 'PC', rank: 3, totalPt: -3, yen: 0 },
+          { seat: 3, playerId: 'PD', rank: 4, totalPt: -8, yen: 0 },
+        ],
+      };
+      const smA = stats.summary([g1, g5], 'PA');
+      const styA15 = stats.styleMetrics([g1, g5], 'PA');
+      check('TC-8-5 結果のみ対局も合計ptに反映(2局)', smA.count, 2);
+      check('TC-8-5 和了率等の分母には入らない(1局のみ)', styA15.evGameCount, 1);
+
+      // TC-8-6: 直対収支
+      const mk = (id, aRank, bRank) => ({
+        id, mode: 'yonma', rules: baseRules,
+        seats: [{ playerId: 'PA' }, { playerId: 'PB' }, { playerId: 'PC' }, { playerId: 'PD' }],
+        events: [], status: 'finished', startedAt: Date.now() - 1000, endedAt: Date.now(),
+        result: [
+          { seat: 0, playerId: 'PA', rank: aRank, totalPt: aRank === 1 ? 20 : -20, yen: 0 },
+          { seat: 1, playerId: 'PB', rank: bRank, totalPt: bRank === 1 ? 20 : -20, yen: 0 },
+          { seat: 2, playerId: 'PC', rank: 3, totalPt: 0, yen: 0 },
+          { seat: 3, playerId: 'PD', rank: 4, totalPt: 0, yen: 0 },
+        ],
+      });
+      const gR1 = mk('tc8-6a', 1, 2); // A勝ち
+      const gR2 = mk('tc8-6b', 2, 1); // A負け
+      const gR3NoB = {
+        id: 'tc8-6c', mode: 'yonma', rules: baseRules,
+        seats: [{ playerId: 'PA' }, { playerId: 'PE' }, { playerId: 'PC' }, { playerId: 'PD' }],
+        events: [], status: 'finished', startedAt: Date.now() - 1000, endedAt: Date.now(),
+        result: [
+          { seat: 0, playerId: 'PA', rank: 1, totalPt: 20, yen: 0 },
+          { seat: 1, playerId: 'PE', rank: 2, totalPt: -20, yen: 0 },
+          { seat: 2, playerId: 'PC', rank: 3, totalPt: 0, yen: 0 },
+          { seat: 3, playerId: 'PD', rank: 4, totalPt: 0, yen: 0 },
+        ],
+      };
+      const riv = stats.rivalStats([gR1, gR2, gR3NoB], 'PA').find((r) => r.playerId === 'PB');
+      check('TC-8-6 直対収支(同卓2局のみ・pt合計0)', riv ? riv.ptSum : NaN, 0);
+      check('TC-8-6 直対勝敗1勝1敗(勝)', riv ? riv.win : NaN, 1);
+      check('TC-8-6 直対勝敗1勝1敗(敗)', riv ? riv.lose : NaN, 1);
+
+      // TC-8-7: 4人3麻の抜け番局は参加局数に入らない
+      const g7 = {
+        id: 'tc8-7', mode: 'yonin_sanma', rules: baseRules,
+        seats: [{ playerId: 'PA' }, { playerId: 'PB' }, { playerId: 'PC' }, { playerId: 'PD' }],
+        events: [{ type: 'WIN', winners: [{ seat: 0, directPoints: 1000 }], method: 'ron', loserSeat: 1 }],
+        status: 'finished', startedAt: Date.now() - 1000, endedAt: Date.now(),
+        result: [
+          { seat: 0, playerId: 'PA', rank: 1, totalPt: 5, yen: 0 },
+          { seat: 1, playerId: 'PB', rank: 3, totalPt: -5, yen: 0 },
+          { seat: 2, playerId: 'PC', rank: 2, totalPt: 0, yen: 0 },
+          { seat: 3, playerId: 'PD', rank: 4, totalPt: 0, yen: 0 },
+        ],
+      };
+      const evD7 = stats.computeEventStats(g7, 3);
+      const evA7 = stats.computeEventStats(g7, 0);
+      check('TC-8-7 抜け番だった局は参加局数0', evD7.participatedKyoku, 0);
+      check('TC-8-7 出場していた局は参加局数1', evA7.participatedKyoku, 1);
+    }
+
+    // TC-9 (F-32 エンコード/デコード。8.7章)
+    {
+      const payload = {
+        v: 1,
+        games: [{ id: 'g1', mode: 'yonma', seats: [{ playerId: 'PA' }], events: [], result: [], updatedAt: 1 }],
+        players: [{ id: 'PA', name: 'テスト太郎', createdAt: 1, updatedAt: 1 }],
+      };
+      try {
+        const encoded = await share.encodePayload(payload);
+        const decoded = await share.decodePayload(encoded);
+        checkBool('TC-9-1 エンコード/デコード往復一致', JSON.stringify(decoded) === JSON.stringify(payload));
+        checkBool('TC-9-2 base64urlに+/=を含まない', !/[+/=]/.test(encoded.replace(/^raw:/, '')));
+        try {
+          await share.decodePayload(encoded.slice(0, -1));
+          checkBool('TC-9-3 破損文字列は例外を投げる', false);
+        } catch (e2) {
+          checkBool('TC-9-3 破損文字列は例外を投げる', true);
+        }
+      } catch (e) {
+        checkBool('TC-9 CompressionStream非対応環境(スキップ): ' + e, true);
+      }
+    }
+
+    // TC-10 (v2.1: 焼き鳥ptの授受。8.5.1)
+    {
+      const baseRules = () => ({
+        returnPoints: 30000, startPoints: 25000, uma: [10, 5, -5, -10], rounding: 'none', tieBreak: 'seatOrder',
+        yakitori: { enabled: true, penaltyPt: 10, method: 'share' }, bustBonus: { enabled: false }, chip: { enabled: false },
+      });
+      const fp = [{ seat: 0, points: 40000 }, { seat: 1, points: 30000 }, { seat: 2, points: 20000 }, { seat: 3, points: 10000 }];
+      // TC-10-1: 山分け・焼き鳥1人(4位)
+      {
+        const res = domain.settleGame(fp, 4, baseRules(), { yakitoriSeats: [3] });
+        const by = Object.fromEntries(res.map((r) => [r.seat, r]));
+        check('TC-10-1 焼き鳥者-10', by[3].bonusPt, -10);
+        check('TC-10-1 1位+3.4(端数優先)', by[0].bonusPt, 3.4);
+        check('TC-10-1 2位+3.3', by[1].bonusPt, 3.3);
+        check('TC-10-1 3位+3.3', by[2].bonusPt, 3.3);
+      }
+      // TC-10-2: 山分け・焼き鳥2人
+      {
+        const rules = baseRules();
+        const res = domain.settleGame(fp, 4, rules, { yakitoriSeats: [2, 3] });
+        const by = Object.fromEntries(res.map((r) => [r.seat, r]));
+        check('TC-10-2 焼き鳥2人 各-10(seat2)', by[2].bonusPt, -10);
+        check('TC-10-2 焼き鳥2人 各-10(seat3)', by[3].bonusPt, -10);
+        check('TC-10-2 非焼き鳥 各+10(seat0)', by[0].bonusPt, 10);
+        check('TC-10-2 非焼き鳥 各+10(seat1)', by[1].bonusPt, 10);
+      }
+      // TC-10-3: 祝儀・焼き鳥1人
+      {
+        const rules = baseRules();
+        rules.yakitori.method = 'perPlayer';
+        const res = domain.settleGame(fp, 4, rules, { yakitoriSeats: [3] });
+        const by = Object.fromEntries(res.map((r) => [r.seat, r]));
+        check('TC-10-3 焼き鳥者-30(祝儀)', by[3].bonusPt, -30);
+        check('TC-10-3 他3人 各+10(祝儀)', by[0].bonusPt, 10);
+      }
+      // TC-10-4: トップ総取り・焼き鳥1人が4位
+      {
+        const rules = baseRules();
+        rules.yakitori.method = 'topTake';
+        const res = domain.settleGame(fp, 4, rules, { yakitoriSeats: [3] });
+        const by = Object.fromEntries(res.map((r) => [r.seat, r]));
+        check('TC-10-4 4位-10', by[3].bonusPt, -10);
+        check('TC-10-4 1位+10(トップ総取り)', by[0].bonusPt, 10);
+        check('TC-10-4 2位は変動なし', by[1].bonusPt, 0);
+      }
+      // TC-10-5: 全員焼き鳥/全員回避 → 授受なし
+      {
+        const rules = baseRules();
+        const resAll = domain.settleGame(fp, 4, rules, { yakitoriSeats: [0, 1, 2, 3] });
+        checkBool('TC-10-5 全員焼き鳥→授受なし', resAll.every((r) => r.bonusPt === 0));
+        const resNone = domain.settleGame(fp, 4, rules, { yakitoriSeats: [] });
+        checkBool('TC-10-5 全員回避→授受なし', resNone.every((r) => r.bonusPt === 0));
+      }
+      // TC-10-6: 焼き鳥pt加算後も順位は加算前のまま
+      {
+        const rules = baseRules();
+        rules.yakitori.method = 'topTake';
+        rules.yakitori.penaltyPt = 5000; // 極端な値で総額の大小関係を反転させても
+        const fpClose = [{ seat: 0, points: 25100 }, { seat: 1, points: 24900 }, { seat: 2, points: 25000 }, { seat: 3, points: 25000 }];
+        const res = domain.settleGame(fpClose, 4, rules, { yakitoriSeats: [1] });
+        const by = Object.fromEntries(res.map((r) => [r.seat, r]));
+        checkBool('TC-10-6 順位は焼き鳥pt加算前のまま(rank1=seat0)', by[0].rank === 1);
+      }
+    }
+
+    // TC-11 (v2.1: 箱下ボーナス・チップ円一本化・同点山分け。8.5.2/8.5)
+    {
+      // TC-11-1: 3位の和了で4位が箱下
+      {
+        const bb = domain.bustBonusSettlement([0, 1, 2, 3], { 0: 40000, 1: 30000, 2: 25000, 3: -2000 }, [{ seat: 3, bySeat: 2 }], 10);
+        check('TC-11-1 3位+10(飛ばした者)', bb[2], 10);
+        check('TC-11-1 4位-10(飛んだ者)', bb[3], -10);
+      }
+      // TC-11-2: ノーテン罰符で箱下(飛ばした者なし)→1位が獲得
+      {
+        const bb = domain.bustBonusSettlement([0, 1, 2, 3], { 0: 40000, 1: 30000, 2: 25000, 3: -500 }, [], 10);
+        check('TC-11-2 飛んだ者-10', bb[3], -10);
+        check('TC-11-2 1位+10(飛ばした者なし)', bb[0], 10);
+      }
+      // TC-11-3: チップは円のみに加算・ptは不変
+      {
+        const rulesChip = {
+          returnPoints: 30000, startPoints: 25000, uma: [10, 5, -5, -10], rounding: 'none', tieBreak: 'seatOrder',
+          yakitori: { enabled: false }, bustBonus: { enabled: false }, chip: { enabled: true, valuePerChip: 100 },
+        };
+        const fp3 = [{ seat: 0, points: 40000 }, { seat: 1, points: 30000 }, { seat: 2, points: 20000 }, { seat: 3, points: 10000 }];
+        const withoutChip = domain.settleGame(fp3, 4, rulesChip, {});
+        const withChip = domain.settleGame(fp3, 4, rulesChip, { chipCounts: { 0: 3, 1: -3, 2: 0, 3: 0 } });
+        const w0 = withChip.find((r) => r.seat === 0);
+        const w1 = withChip.find((r) => r.seat === 1);
+        const n0 = withoutChip.find((r) => r.seat === 0);
+        check('TC-11-3 +3枚→+300円', w0.chipYen, 300);
+        check('TC-11-3 -3枚→-300円', w1.chipYen, -300);
+        check('TC-11-3 チップはptに影響しない', w0.totalPt - n0.totalPt, 0);
+      }
+      // TC-11-4: 同点トップ2人(split)
+      {
+        const rulesSplit = {
+          returnPoints: 30000, startPoints: 25000, uma: [10, 5, -5, -10], rounding: 'none', tieBreak: 'split',
+          yakitori: { enabled: false }, bustBonus: { enabled: false }, chip: { enabled: false },
+        };
+        const fp4 = [{ seat: 0, points: 35000 }, { seat: 1, points: 35000 }, { seat: 2, points: 20000 }, { seat: 3, points: 10000 }];
+        const res = domain.settleGame(fp4, 4, rulesSplit, {});
+        const by = Object.fromEntries(res.map((r) => [r.seat, r]));
+        check('TC-11-4 同点1位(seat0) ウマ+オカ=17.5', by[0].umaPt + by[0].okaPt, 17.5);
+        check('TC-11-4 同点1位(seat1) ウマ+オカ=17.5', by[1].umaPt + by[1].okaPt, 17.5);
+        check('TC-11-4 3位ウマ-5', by[2].umaPt, -5);
+        check('TC-11-4 4位ウマ-10', by[3].umaPt, -10);
+        check('TC-11-4 合計0', res.reduce((a, r) => a + r.totalPt, 0), 0);
+      }
+      // TC-11-5: tieBreak=seatOrder(デフォルト)は従来どおり(TC-2と同結果)
+      {
+        const rules = { returnPoints: 30000, startPoints: 25000, uma: [10, 5, -5, -10], rounding: 'round', tieBreak: 'seatOrder' };
+        const finalPoints = [0, 1, 2, 3].map((s) => ({ seat: s, points: 25000 }));
+        const res = domain.settleGame(finalPoints, 4, rules, {});
+        const bySeat = Object.fromEntries(res.map((r) => [r.seat, r]));
+        check('TC-11-5 seatOrderは従来どおり(1位25.0)', bySeat[0].totalPt, 25.0);
+      }
+    }
+
+    // TC-12 (v2.1: 箱下終了。domain.isGameEndの判定一元化)
+    {
+      const rulesBustOn = { length: 'tonpu', bustEnd: true };
+      const rulesBustOff = { length: 'tonpu', bustEnd: false };
+      checkBool('TC-12-1 箱下終了有効→isGameEnd=true', domain.isGameEnd({ round: 'E', kyokuNum: 2, points: [1000, -100, 500, 200] }, rulesBustOn) === true);
+      checkBool('TC-12-2 箱下終了無効→isGameEnd=false', domain.isGameEnd({ round: 'E', kyokuNum: 2, points: [1000, -100, 500, 200] }, rulesBustOff) === false);
+      checkBool('TC-12-3 手動調整で-500→isGameEnd=true', domain.isGameEnd({ round: 'E', kyokuNum: 3, points: [2000, -500, 1000, 500] }, rulesBustOn) === true);
+      checkBool('TC-12-4 Undoで復帰→isGameEnd=false', domain.isGameEnd({ round: 'E', kyokuNum: 3, points: [2000, 500, 1000, 500] }, rulesBustOn) === false);
+    }
+
     return results;
   }
 
-  function render() {
-    const results = run();
+  async function render() {
+    const results = await run();
     const pass = results.filter((r) => r.ok).length;
     const fail = results.length - pass;
     const rows = results
@@ -3589,7 +6059,7 @@ const selftest = (function () {
       .join('');
     document.getElementById('app').innerHTML =
       '<div style="padding:16px;font-family:-apple-system,sans-serif;">' +
-      '<h1 style="font-size:20px;">自己テスト結果 (8.6章 TC-1〜TC-6)</h1>' +
+      '<h1 style="font-size:20px;">自己テスト結果 (8.6〜8.7章 TC-1〜TC-12)</h1>' +
       '<div style="font-size:12px;color:#8a8a8e;margin-bottom:8px;">雀点 v' + APP_VERSION + ' ・ 仕様書 v' + SPEC_VERSION + '</div>' +
       '<div style="font-size:16px;font-weight:800;margin:10px 0;color:' + (fail === 0 ? '#3d9440' : '#d64545') + ';">' +
       (fail === 0 ? '✅ 全' + results.length + '件パス' : '❌ ' + fail + '件失敗 / 全' + results.length + '件') +
